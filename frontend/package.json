@@ -2,7 +2,7 @@
   "name": "metropulse-frontend",
   "version": "0.1.0",
   "scripts": {
-    "start": "ng serve",
+    "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build",
     "test": "ng test --watch=false"
   },
