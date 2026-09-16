@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: metropulse-simulator
+
+metropulse:
+  simulator:
+    ingest-url: http://localhost:8080/api/v1/telemetry/ingest
+    ingest-key: dev-ingest-key
+    seed: 42

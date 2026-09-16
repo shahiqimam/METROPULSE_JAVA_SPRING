@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: metropulse-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/metropulse
+    username: metropulse
+    password: metropulse
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  kafka:
+    bootstrap-servers: localhost:9092
+
+metropulse:
+  telemetry:
+    ingest-key: ${METROPULSE_INGEST_KEY:dev-ingest-key}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+server:
+  port: 8080
