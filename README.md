@@ -1,88 +1,166 @@
-# MetroPulse Java Spring
+# MetroPulse
 
-MetroPulse is a synthetic real-time transit operations control center built as an enterprise Java portfolio project.
+Real-time transit operations platform: Java 21, Spring Boot, Kafka, PostgreSQL/PostGIS, Redis and
+Angular. Synthetic fleet telemetry, PostGIS route projection, headway and bunching detection,
+deduplicated alerts, incident workflow, EV charging, historical playback and analytics.
 
-It models a fictional bus/BRT network with schedule data, live vehicle telemetry, operational state projection, alerting, EV charging operations, historical playback, and analytics.
+**All data is synthetic.** MetroPulse is not a real transit, dispatch, fare-collection or
+passenger-information system. Every route, schedule, vehicle, operator, observation, incident and
+battery reading is fictional.
 
-## Implemented Foundation
+---
 
-- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, and static schedule read API
-- Event-driven operational state: a Kafka consumer projects published telemetry into current vehicle state, deduplicating on event id, with bounded retries and a dead-letter topic
-- Operational state projection: PostGIS route progress and route deviation in meters, telemetry-age connectivity, and a no-rewind rule for late events
-- Headway between consecutive vehicles, with bunching and excessive-gap rules that require a 90-second persistence window and clear on recovery
-- Angular operations dashboard that reads live vehicle state and scheduled route data through the backend API
-- JUnit 5 unit tests plus PostgreSQL/PostGIS integration tests run through the Maven Wrapper
-- Java simulator that drives a deterministic fleet along the seeded route geometry, with scenarios for bunching, route deviation, telemetry loss, long dwell, low battery, multi-incident, and recovery
-- PostgreSQL/PostGIS, Kafka, Redis, backend, frontend, and simulator wired with Docker Compose
-- Development nginx proxy for containerized frontend `/api` calls
-- Architecture docs, ADRs, Jenkins pipeline, and environment examples
+## What it does
 
-## Planned Features
-
-- Schedule deviation and punctuality
-- Operator authentication and role-based authorization
-- WebSocket/STOMP realtime dashboard deltas
-- Fleet, route, stop, trip, incident, and charging workflows
-- Kafka event consumers
-- Historical playback and analytics views
-- Broader JUnit, Mockito, Testcontainers, and frontend test coverage
-- Production deployment hardening and CI/CD expansion
-
-## Project Layout
+A simulated fleet runs a route. Telemetry arrives, is stored, published, projected, measured, and
+turned into things a controller acts on.
 
 ```text
-backend/       Spring Boot API and processors
-frontend/      Angular control-center app
-simulator/     Java synthetic telemetry simulator
-docs/          Architecture, decisions, and implementation notes
-infra/         Nginx and operational scripts
-data/          Synthetic schedule/GTFS-style inputs
+Java simulator
+      │  POST /api/v1/telemetry/ingest  (X-Ingest-Key)
+      ▼
+Spring Boot ingest ──┬─► vehicle_telemetry   immutable history
+                     └─► outbox_event        same transaction
+                              │
+                     outbox publisher
+                              ▼
+                     Kafka  metropulse.telemetry.v1   (keyed by vehicle)
+                              │
+              operational-state consumer  (idempotent, DLT on poison)
+                              ▼
+                     vehicle_current_state
+                     ├─ PostGIS route progress and deviation
+                     ├─ connectivity from telemetry age
+                     ├─ headway, bunching, excessive gap
+                     └─ alerts ─► incidents
+                              ▼
+                  REST baseline + WebSocket deltas
+                              ▼
+                     Angular control centre
 ```
 
-## Local Prerequisites
-
-- Java 21+ (the Maven Wrapper supplies Maven itself)
-- Node.js 22+
-- Docker Desktop
-
-## Development Commands
+## Running it
 
 ```bash
-./mvnw test
-npm --prefix frontend run build
-docker compose up --build
+docker compose up -d --build
 ```
 
-Integration tests need a PostgreSQL/PostGIS database; see [docs/testing.md](docs/testing.md).
+| | |
+| --- | --- |
+| Control centre | http://localhost:4200 |
+| Backend API | http://localhost:18080 |
+| Kafka UI | http://localhost:8085 |
+| PostgreSQL | `localhost:5433` |
 
-The Docker development stack exposes:
-
-- Frontend dashboard: http://localhost:4200
-- Backend API: http://localhost:18080
-- Kafka UI: http://localhost:8085
-- Postgres: localhost:5433
-
-Default Docker dashboard credentials are:
+Sign in as any seeded operator. Passwords follow `<role>-dev-password`:
 
 ```text
-username: operator
-password: metropulse-dev-password
+admin@metropulse.test        admin-dev-password
+controller@metropulse.test   controller-dev-password
+supervisor@metropulse.test   supervisor-dev-password
+planner@metropulse.test      planner-dev-password
+viewer@metropulse.test       viewer-dev-password
 ```
 
-Override them with `METROPULSE_OPERATOR_USERNAME` and `METROPULSE_OPERATOR_PASSWORD` in a local `.env` file.
+A controller can acknowledge alerts and work incidents; a viewer can see everything and change
+nothing. These are synthetic demo credentials, documented in the migration that creates them.
 
-Vehicle state is documented in [docs/operational-state.md](docs/operational-state.md) and the spacing
-rules in [docs/headway-bunching.md](docs/headway-bunching.md). The event path is documented in
-[docs/outbox.md](docs/outbox.md) and [docs/kafka.md](docs/kafka.md).
+### Watching a scenario
 
-The simulator posts fleet telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key, and the dashboard reads current vehicle state from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example:
+The simulator drives the seeded route geometry, and scenarios change how it drives:
 
 ```bash
 METROPULSE_SIMULATOR_SCENARIO=ROUTE_DEVIATION docker compose up -d simulator --force-recreate
 ```
 
-Scenarios and simulator configuration are documented in [docs/simulator.md](docs/simulator.md).
+`BUNCHING`, `ROUTE_DEVIATION`, `TELEMETRY_LOSS`, `LONG_DWELL`, `EV_LOW_BATTERY`, `MULTI_INCIDENT`,
+`RECOVERY`, `NORMAL_OPERATION`. Each is reproducible from its seed.
 
-## Synthetic Data Notice
+### Production-style stack
 
-MetroPulse is not a real transit, dispatch, fare-collection, or passenger-information system. All routes, schedules, vehicles, operators, telemetry, incidents, and EV data are fictional.
+```bash
+cp .env.prod.example .env.prod   # then replace every value
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+infra/scripts/smoke-test.sh http://localhost:8080 "$(grep METROPULSE_INGEST_KEY .env.prod | cut -d= -f2)"
+```
+
+Only nginx is published. Every secret is required rather than defaulted, so the stack refuses to
+start without one.
+
+## Building and testing
+
+```bash
+./mvnw test      # unit tests, no infrastructure
+./mvnw verify    # everything; needs PostgreSQL/PostGIS
+npm --prefix frontend run build
+```
+
+`mvnw` downloads Maven itself — only Java 21+ is required.
+
+**238 tests**: threshold and rule logic as unit tests; migrations, PostGIS behaviour, the Kafka
+consumer, charger concurrency, authentication and the WebSocket as integration tests against real
+infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
+projection depends on. See [testing.md](docs/testing.md).
+
+## Some things worth looking at
+
+**[The outbox](docs/outbox.md)** — the failure it prevents (commit succeeds, publish fails), and what
+it does *not* guarantee: publication is at-least-once, which is why consumers are idempotent.
+
+**[Idempotent consumers](docs/kafka.md)** — every event id is claimed in `processed_event` in the same
+transaction as the work it triggers, so redelivery is a no-op rather than a second application.
+
+**[The no-rewind rule](docs/operational-state.md)** — a late event is still valid history, but current
+state must not move backwards. One `WHERE` clause on the upsert's conflict branch.
+
+**[Headway and bunching](docs/headway-bunching.md)** — measuring spacing from route progress, why a
+stopped vehicle needs a different speed basis, and why every rule has a persistence window.
+
+**[Alerts](docs/alerts.md)** — fingerprint deduplication enforced by a partial unique index, and
+hysteresis so a vehicle sitting on a threshold cannot flap an alert on and off.
+
+**[Charger concurrency](docs/incidents-and-ev.md)** — why check-then-insert is wrong, what
+`SELECT ... FOR UPDATE` fixes, and the negative check: with the lock removed, the test fails.
+
+**[Security](docs/security.md)** — short-lived access tokens, revocable hashed refresh tokens, and two
+bugs the tests caught: a revocation rolled back by the exception that triggered it, and a logout that
+signed the operator out everywhere.
+
+**[Deployment](docs/deployment.md)** — including the nginx DNS trap that 502s every request after a
+backend restart, and how it was verified.
+
+## Layout
+
+```text
+backend/     Spring Boot API, projection, rules, alerting
+frontend/    Angular control centre
+simulator/   Java telemetry simulator
+docs/        Architecture, decisions, and what is not built
+infra/       nginx edge and operational scripts
+```
+
+Backend packages are organised by capability — `telemetry`, `operations`, `alert`, `incident`, `ev`,
+`playback`, `analytics`, `auth`, `realtime` — rather than by layer.
+
+## What is not built
+
+Written down rather than implied, because a portfolio project that overstates itself is worse than
+one with a short honest list:
+
+- **Punctuality.** Needs stop-arrival detection, which needs the simulator to run scheduled trips
+  rather than a continuous loop. `VEHICLE_LATE`, `VEHICLE_EARLY` and `LONG_DWELL` alerts wait on the
+  same thing. Analytics reports *regularity* instead, under its own name.
+- **GTFS import.** The schedule model exists and is seeded by migration; there is no upload path.
+- **Playback UI.** The API is there; the dashboard does not consume it yet.
+- **Retention.** The policy is documented; nothing prunes automatically.
+- **Horizontal scale.** One backend instance: two would contend on the outbox publisher and would
+  each broadcast to only their own WebSocket subscribers.
+- **TLS**, log aggregation, and platform metrics.
+
+Known limitations are listed at the end of each doc.
+
+## Stack
+
+Java 21 · Spring Boot 3.5 · Spring Security · Spring Kafka · Spring WebSocket · Flyway ·
+PostgreSQL 16 / PostGIS 3.4 · Apache Kafka 4 · Redis 7 · Angular 20 · JUnit 5 · Testcontainers ·
+Maven · Docker · nginx · Jenkins

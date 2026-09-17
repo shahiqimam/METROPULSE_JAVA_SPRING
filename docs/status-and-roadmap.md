@@ -1,322 +1,115 @@
-# MetroPulse Status and Roadmap
-
-Last updated: 2026-09-17
-
-This document tracks the repository state against the MetroPulse project brief. The brief is reference material for scope and acceptance criteria; the active work is driven by user requests and verified repository state.
-
-## Current Implementation
-
-### Backend
-
-Implemented:
-
-- Spring Boot backend module
-- health endpoint at `GET /api/v1/health`
-- Flyway migrations for the foundation schema, development fleet seed, static schedule schema, and schedule seed
-- PostgreSQL/PostGIS schema for users, vehicles, telemetry, and outbox events
-- telemetry ingest endpoint at `POST /api/v1/telemetry/ingest`
-- ingest key validation through `X-Ingest-Key`
-- Bean Validation on telemetry payloads
-- duplicate telemetry handling by `source_event_id`
-- known-vehicle validation
-- transactional telemetry insert plus outbox event insert
-- scheduled outbox publisher to Kafka topic `metropulse.telemetry.v1`
-- standard API error handling with request IDs
-- current vehicle state table (`vehicle_current_state`) projected by a Kafka consumer from published events
-- idempotency ledger (`processed_event`) claimed in the same transaction as the projection write
-- bounded consumer retries and a dead-letter topic for events that can never be applied
-- no-rewind rule so late events are stored historically without moving current state backwards
-- PostGIS route progress (`ST_LineLocatePoint`) and route deviation in meters (`ST_Distance` on geography)
-- vehicle-to-route assignment (`vehicle.assigned_route_id`) seeded for the development fleet
-- telemetry-age connectivity classification (ONLINE/STALE/OFFLINE)
-- headway between consecutive vehicles from route progress, with a documented reference-speed fallback for stopped vehicles
-- bunching and excessive-gap rules with a 90-second persistence window, confirmation, and recovery
-- headway read APIs at `GET /api/v1/routes/{code}/headway` and `GET /api/v1/routes/headway/conditions`
-- route geometry read API at `GET /api/v1/routes/{code}/geometry`
-- current vehicle state read endpoint at `GET /api/v1/telemetry/vehicles/latest`
-- Maven Wrapper so the build runs without a host Maven install
-- JUnit 5 unit tests and PostgreSQL/PostGIS integration tests
-- Docker Compose development credentials for authenticated read APIs
-- static route and route-stop read endpoints at `GET /api/v1/routes` and `GET /api/v1/routes/{code}/stops`
-
-Not yet implemented:
-
-- JWT authentication and refresh tokens
-- role-based authorization
-- GTFS-style schedule importer
-- schedule deviation and punctuality
-- alerts, incidents, EV charging, playback, analytics
-- WebSocket realtime updates
-- MockMvc API and charger concurrency test coverage
-- outbox publishing under broker failure
-
-### Simulator
-
-Implemented:
-
-- Java Spring Boot simulator module
-- deterministic scheduled telemetry emitter for a multi-vehicle fleet
-- movement along the seeded route geometry: distance-based progress, wrapping at the end of the shape
-- evenly spaced fleet so headway and bunching are consequences of speed, not scripted outcomes
-- scenario behaviour for bunching, route deviation, telemetry loss, long dwell, low battery, multi-incident, and recovery
-- configurable ingest URL, ingest key, seed, interval, vehicle IDs, scenario, and route points
-- Docker Compose wiring, including scenario, seed, and interval overrides
-- unit tests for the route path and every scenario
-
-Not yet implemented:
-
-- multi-route fleet simulation beyond the seeded development route
-- schedule-aware movement (trips and stop times rather than a continuous loop)
-- dwell at actual stop locations
-
-### Frontend
-
-Implemented:
-
-- Angular standalone application
-- operations dashboard route
-- live latest-telemetry API integration
-- configurable API base and Basic Auth credentials
-- Docker and Angular dev proxy support for `/api`
-- auto-refresh toggle with 10-second polling
-- vehicle summary cards, fleet summary metrics, scheduled route summary, and route stop pattern
-- network map drawn from the route's stored PostGIS geometry, with stops, heading-oriented vehicles, and off-route halos
-- fleet list ordered worst-state-first with status stated in words
-- headway panel with a shared threshold scale and sustained/watching conditions
-- counters for off-route, offline, low battery, and sustained headway conditions
-- connection settings moved into a drawer
-- extracted telemetry API service
-
-Not yet implemented:
-
-- login page and auth flow
-- route guards
-- map view
-- vehicle detail pages
-- alerts/incidents/EV/playback/analytics screens
-- WebSocket client
-- frontend automated tests
-
-### Infrastructure and Docs
-
-Implemented:
-
-- Docker Compose stack for backend, frontend, simulator, PostGIS, Kafka, Redis, Kafka UI
-- frontend nginx config for Angular routes and `/api` proxying
-- Jenkinsfile foundation
-- `.dockerignore` for smaller Docker contexts
-- README with current development commands and credentials
-- ADR and architecture documentation foundation
-
-Not yet implemented:
-
-- production-style Compose/nginx stack where only nginx is public
-- complete Jenkins pipeline stages with passing tests
-- production topic configuration beyond the local telemetry topic
-- deployment docs and smoke-test automation
-
-## Verified So Far
-
-Verified successfully:
-
-- backend Docker image builds
-- simulator Docker image builds
-- frontend local Angular production build
-- Docker Compose backend health endpoint returns `UP`
-- telemetry ingest accepts valid simulator/manual events
-- duplicate telemetry returns duplicate status
-- missing ingest key returns structured 400 error
-- telemetry rows and outbox rows are persisted in Postgres
-- simulator emits accepted telemetry events on schedule
-- latest telemetry API returns live `BUS-042` data with authentication
-- frontend dev proxy reaches the protected backend API
-- containerized frontend nginx proxies `/api` to backend successfully
-- stable Docker dashboard credentials work: `operator / metropulse-dev-password`
-- `.dockerignore` keeps Docker build contexts small; frontend image rebuilt successfully after the optimization
-- static schedule migrations apply through Flyway to schema version 4
-- development seeds create 4 vehicles, 1 agency, 1 route, 5 stops, 1 trip, and 5 stop times
-- seeded route `M42` stores a 5-point PostGIS route geometry
-- schedule read APIs return route summary and ordered stop pattern data with authentication
-- outbox publisher drains unpublished rows to Kafka; 604 existing rows were marked published with no errors
-- Kafka topic `metropulse.telemetry.v1` is created with 3 partitions and contains telemetry envelope messages
-- simulator can emit four seeded development vehicles per tick with scenario-specific speed, dwell, occupancy, and battery patterns
-- Maven Wrapper bootstraps Maven 3.9.9 and `./mvnw test` passes: 24 backend tests and 1 simulator test
-- integration tests run the full Flyway migration set (through V7) against real PostgreSQL/PostGIS
-- route progress is 0.0 at the seeded M42 start point, 1.0 at its end point, and in between elsewhere
-- off-route positions report deviation in meters, and unassigned vehicles report null rather than a fabricated 0.0
-- live Docker stack returns route code, progress, deviation, telemetry age, and connectivity for all four simulated vehicles
-- `./mvnw clean verify` passes end to end: 23 backend tests and 19 simulator tests
-- under `NORMAL_OPERATION` all four simulated vehicles report 0.00 m route deviation, evenly spaced around the shape
-- under `ROUTE_DEVIATION` the affected vehicle reports 179.66 m against a requested 180 m offset, and the rest stay at 0.00 m
-- under `TELEMETRY_LOSS` the affected vehicle reaches OFFLINE at 62 s while the rest stay ONLINE
-- `METROPULSE_SIMULATOR_SCENARIO` now reaches the container: Compose passes scenario, seed, interval, and ingest key through
-- `./mvnw clean verify` passes with 39 backend tests and 19 simulator tests
-- the operational-state consumer applies events arriving over a real (in-process) Kafka broker, applies a redelivered event once, and dead-letters malformed and unknown-vehicle events without blocking the events behind them
-- live Docker stack projects state through Kafka end to end: 9834 events recorded in `processed_event` by the `operational-state` consumer, with the outbox backlog draining to single digits
-- `./mvnw clean verify` passes with 86 backend tests and 21 simulator tests
-- BUNCHING scenario produces a real pack in the live stack: BUS-317 queued 12 m behind BUS-042 classified BUNCHING, a 1005 m hole to BUS-101 classified EXCESSIVE_GAP, both sustained past the 90-second window
-- conditions clear when spacing recovers, and a pair that deteriorates again starts a fresh window
-
-Current limitations:
-
-- Testcontainers cannot start containers on this host: docker-java fails API negotiation against Docker Engine 29 with HTTP 400, although the Docker CLI works. Integration tests were therefore run against the Compose stack's real PostGIS database through `METROPULSE_TEST_DB_URL`. The Testcontainers path remains the default and is what CI should exercise.
-- The simulator drives a continuous loop of the route shape rather than scheduled trips, so schedule deviation cannot be derived from it yet. Trip-aware movement is needed before punctuality means anything.
-
-## Recommended Phase Plan
-
-### Phase 0: Foundation Stabilization
-
-Status: mostly complete.
-
-Remaining:
-
-- tighten README clone-to-run instructions
-
-Estimated effort: 0.5-1 day.
-
-### Phase 1: Authentication
-
-Build:
-
-- login, refresh, logout, me endpoints
-- user table password hashing
-- JWT access tokens and refresh tokens
-- roles: `ADMIN`, `CONTROLLER`, `FLEET_SUPERVISOR`, `PLANNER`, `VIEWER`
-- Angular login, auth service, interceptor, route guard
-
-Estimated effort: 2-3 days.
-
-### Phase 2: Static Schedule and Seed Data
-
-Build:
-
-- agency, route, stop, calendar, trip, stop-time schema
-- route geometry and stop location PostGIS indexes
-- fictional seed network
-- read APIs for routes and vehicles
-- dashboard route counts from stored data
-
-Estimated effort: 3-5 days.
-
-### Phase 3: Simulator and Telemetry Expansion
-
-Build:
-
-- multi-vehicle simulation
-- scenario model for normal operation, bunching, route deviation, telemetry loss, long dwell, low battery, recovery
-- richer simulator configuration and docs
-
-Estimated effort: 2-4 days.
-
-### Phase 4: Kafka and Outbox Publisher
-
-Build:
-
-- outbox polling publisher
-- Kafka topic constants/config
-- producer publishing `VehicleTelemetryRecorded`
-- retry/error handling and `attempt_count`
-- tests for DB commit plus unpublished outbox behavior
-
-Estimated effort: 3-5 days.
-
-### Phase 5: Operational State Projection
-
-Build:
-
-- current vehicle state table
-- late-event no-rewind rule
-- route progress with PostGIS
-- connectivity state
-- occupancy and battery projection
-
-Estimated effort: 5-8 days.
-
-### Phase 6: Headway, Bunching, and Route Deviation
-
-Build:
-
-- headway calculator
-- bunching and excessive-gap rules
-- route deviation rules with hysteresis
-- unit tests at threshold boundaries
-
-Estimated effort: 4-7 days.
-
-### Phase 7: Alerts and Incidents
-
-Build:
-
-- alert schema and fingerprint deduplication
-- incident schema and workflow transitions
-- acknowledge/mitigate/resolve APIs
-- dashboard alert/incident panels
-
-Estimated effort: 4-7 days.
-
-### Phase 8: Realtime
-
-Build:
-
-- Spring WebSocket/STOMP endpoint
-- topic design for vehicles, alerts, incidents
-- Angular reconnect strategy
-- REST baseline plus WebSocket delta flow
-
-Estimated effort: 3-5 days.
-
-### Phase 9: EV Operations
-
-Build:
-
-- depots, chargers, charging sessions
-- charger reservation transaction with locking
-- low battery alerts
-- EV dashboard panel
-
-Estimated effort: 4-6 days.
-
-### Phase 10: Playback and Analytics
-
-Build:
-
-- playback sessions and frames
-- historical telemetry replay API
-- punctuality/headway/incident/EV analytics endpoints
-- Angular playback and analytics views
-
-Estimated effort: 5-8 days.
-
-### Phase 11: CI/CD and Portfolio Polish
-
-Build:
-
-- meaningful Jenkins stages
-- Testcontainers integration tests
-- smoke-test scripts
-- screenshots, diagrams, interview notes
-- limitations and performance notes
-
-Estimated effort: 3-6 days.
-
-## Overall Estimate
-
-A polished portfolio-grade version is likely 5-8 focused weeks if implemented carefully with tests and documentation.
-
-A thinner demo version with authentication, schedule seed, simulator, outbox publishing, state projection, basic alerts, WebSocket updates, and a dashboard can likely be built in 2-3 focused weeks.
-
-Token resets are hard to forecast exactly because they depend on debugging, Docker availability, test failures, and how much documentation is produced. A realistic agent-work estimate is:
-
-- foundation plus dashboard: already several coherent pushes completed
-- demo-quality remaining work: roughly 8-15 long coding sessions
-- portfolio-quality remaining work: roughly 20-35 long coding sessions
-
-The best working pattern is to keep shipping small vertical slices: schema, API, simulator/frontend usage, verification, docs, commit, push.
-
-## Next Best Slices
-
-1. Turn headway conditions into deduplicated alerts with acknowledge and close, then incidents.
-2. Add the outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on recovery.
-3. Add schedule deviation against `stop_time` once simulator movement follows trips.
-4. Add authentication with stable seeded operator users and JWT.
-5. Add publisher retry/backoff tuning and tests around failed Kafka sends.
+# Status
+
+Last updated: 2026-09-18
+
+What is built, what is verified, and what is not — kept honest rather than aspirational.
+
+## Built
+
+### Ingest and events
+
+- Telemetry ingest with Bean Validation, ingest-key authentication, known-vehicle checks and
+  duplicate `sourceEventId` handling
+- Transactional outbox: observation and event committed together, published by a scheduled publisher
+- Kafka producer and `operational-state` consumer, keyed by vehicle across 3 partitions
+- Idempotent consumption via `processed_event`, claimed in the same transaction as the work
+- Bounded retries and a dead-letter topic for events that can never be applied
+
+### Operational state
+
+- `vehicle_current_state`, one row per vehicle, written by the consumer
+- No-rewind rule: a late event is stored historically but never moves current state backwards
+- PostGIS route progress (`ST_LineLocatePoint`) and deviation in meters (`ST_Distance` on geography)
+- Connectivity (ONLINE/STALE/OFFLINE) derived at read time from telemetry age
+- Headway between consecutive vehicles, with a documented reference-speed fallback for stopped
+  vehicles
+- Bunching and excessive-gap rules with a 90-second persistence window, confirmation and recovery
+
+### Alerts and incidents
+
+- Alert engine with fingerprint deduplication (partial unique index), per-type persistence and
+  recovery windows, and hysteresis on deviation, battery and capacity
+- Six alert types: telemetry offline, route deviation, bunching, excessive gap, low battery, over
+  capacity
+- Acknowledge and close, with status never settable directly through the API
+- Incident workflow with a single transition table, append-only timeline, and actor taken from the
+  authenticated principal
+
+### EV, playback, analytics
+
+- Depots, chargers and charging sessions
+- Charger reservation under `SELECT ... FOR UPDATE`, with unique partial indexes as the database's
+  own statement of the rule
+- Playback over immutable history, writing nothing operational
+- Analytics: service regularity, alert counts by type, incident timings, EV and battery state
+
+### Platform
+
+- JWT access tokens, rotating hashed refresh tokens, five roles, URL-based authorisation
+- WebSocket/STOMP broadcasts authenticated in the CONNECT frame, with REST as baseline and polling as
+  fallback
+- Angular control centre: network map from stored PostGIS geometry, fleet list, headway panel, alerts
+  panel, login and route guard
+- Simulator driving the seeded route geometry with eight reproducible scenarios and no overtaking
+- Development and production-style Compose stacks, nginx edge, Jenkins pipeline, smoke-test script
+- Maven Wrapper; 14 Flyway migrations
+
+## Verified
+
+Everything below was run, not assumed.
+
+- `./mvnw clean verify` → BUILD SUCCESS: **217 backend + 21 simulator tests**
+- Integration tests run the full migration set against real PostgreSQL/PostGIS
+- Kafka consumer, redelivery and dead-lettering exercised against an in-process broker
+- Charger concurrency test fails when `FOR UPDATE` is removed — the check that makes it meaningful
+- Live Docker stack: telemetry flows ingest → outbox → Kafka → consumer → state; 9,834 events
+  recorded in `processed_event` with the outbox draining to single digits
+- `NORMAL_OPERATION` reports 0.00 m deviation fleet-wide; `ROUTE_DEVIATION` reports 179.66 m against a
+  requested 180 m offset
+- `BUNCHING` produces a real pack: a vehicle queued 12 m behind its leader classified BUNCHING, a
+  1005 m hole classified EXCESSIVE_GAP, both sustained past the persistence window
+- `TELEMETRY_LOSS` drives a vehicle to OFFLINE at 62 s while the rest stay ONLINE
+- Alerts raised, acknowledged and closed through the API; a second close returns 409
+- Incident workflow end to end, including a refused MITIGATING → CANCELLED transition
+- Charger reservation returns 409 CHARGER_NOT_AVAILABLE on the second claim
+- JWT login, role enforcement (viewer POST → 403), and WebSocket streaming through nginx
+- Production-style stack: only nginx published, secrets required, **smoke test 17/17**
+- nginx re-resolves upstreams: backend forced onto a new container IP (172.28.0.6 → 172.28.0.9) with
+  nginx left running, requests kept succeeding
+
+## Not built
+
+- **Punctuality and schedule deviation.** Needs stop-arrival detection, which needs the simulator to
+  run scheduled trips rather than a continuous loop. `VEHICLE_LATE`, `VEHICLE_EARLY` and `LONG_DWELL`
+  alerts depend on the same work. Analytics reports regularity instead, under its own name.
+- **GTFS-style import.** The schedule model exists and is seeded by migration; there is no upload,
+  validation or staged activation path.
+- **Playback, incident, EV and analytics screens.** The APIs exist; the dashboard shows vehicles,
+  headway and alerts only.
+- **Frontend tests.** None. The backend is well covered; the Angular app is not.
+- **Redis.** Running in both stacks and used by nothing. It was provisioned for caching and rule
+  counters that PostgreSQL has handled adequately so far. Better to say so than to add a decorative
+  cache.
+- **Retention.** Policy documented, nothing prunes.
+- **Horizontal scale.** Single instance: two backends would contend on the outbox publisher
+  (`FOR UPDATE SKIP LOCKED`) and each broadcast to only their own subscribers (broker relay).
+- **TLS**, log aggregation, platform metrics, rate limiting on login.
+- **Jenkins** has not run on a real instance; each stage's commands were validated by hand.
+
+## Environment limitation
+
+Testcontainers is the default path for integration tests and is what CI should exercise. On this
+development machine docker-java cannot negotiate an API version with Docker Engine 29 (HTTP 400)
+although the Docker CLI works, so the suite was run against a real PostGIS database supplied through
+`METROPULSE_TEST_DB_URL`. Real PostGIS behaviour was exercised; the container-start path itself was
+not.
+
+## Next
+
+1. Trip-aware simulator movement, then stop-arrival detection — unblocks punctuality and three alert
+   types.
+2. GTFS import with staged activation.
+3. Playback and analytics screens.
+4. Frontend tests.
+5. Outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on
+   recovery.
