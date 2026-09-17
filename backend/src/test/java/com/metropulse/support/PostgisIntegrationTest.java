@@ -18,9 +18,15 @@ import org.testcontainers.utility.DockerImageName;
  * That escape hatch exists for hosts where docker-java cannot talk to the local Docker Engine; CI
  * runs the container path.
  *
- * <p>Outbox publishing is disabled because these tests assert on stored rows, not on Kafka delivery.
+ * <p>Outbox publishing and the Kafka listener are disabled: these tests assert on stored rows and
+ * drive the event handler directly, so no broker is involved.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        // These tests assert on stored rows and drive the event handler directly, so no broker is
+        // involved. A subclass that wants the real listener declares its own @SpringBootTest.
+        "metropulse.outbox.enabled=false",
+        "metropulse.operations.consumer-enabled=false"
+})
 public abstract class PostgisIntegrationTest {
 
     private static final String EXTERNAL_URL = System.getenv("METROPULSE_TEST_DB_URL");
@@ -60,7 +66,6 @@ public abstract class PostgisIntegrationTest {
         registry.add("spring.datasource.username", () -> username);
         registry.add("spring.datasource.password", () -> password);
         registry.add("spring.flyway.clean-disabled", () -> false);
-        registry.add("metropulse.outbox.enabled", () -> false);
         registry.add("metropulse.telemetry.ingest-key", () -> "test-ingest-key");
     }
 }

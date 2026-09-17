@@ -4,23 +4,32 @@ MetroPulse stores every telemetry observation immutably in `vehicle_telemetry`, 
 current-state row per vehicle in `vehicle_current_state`. The control centre reads current state;
 history stays available for playback and analytics.
 
-## Where the projection happens today
+## Where the projection happens
 
-The projection is written inside the telemetry ingest transaction
-(`TelemetryIngestionService.ingest`), in the same transaction as the observation row and the outbox
-row. That keeps the three writes atomic: either all of them commit or none do.
-
-This will move behind the Kafka consumer when the operational-state consumer lands (phase 5/6 of the
-roadmap). The SQL and the rules below are the part that will move; the table contract will not.
+The projection is written by the operational-state Kafka consumer, not by the ingest request.
 
 ```text
 POST /api/v1/telemetry/ingest
   -> validate ingest key, payload, known vehicle, duplicate source event
   -> INSERT vehicle_telemetry            (immutable history)
-  -> UPSERT vehicle_current_state        (projection, no-rewind guarded)
-  -> INSERT outbox_event                 (published to Kafka later)
+  -> INSERT outbox_event                 (same transaction)
+  -> COMMIT
+
+outbox publisher -> Kafka metropulse.telemetry.v1
+
+VehicleStateConsumer
+  -> claim event id in processed_event   (same transaction)
+  -> UPSERT vehicle_current_state        (no-rewind guarded)
   -> COMMIT
 ```
+
+Deriving state from the published event rather than from the request means current state is rebuilt
+from the same events any other consumer sees, and a slow projection cannot slow down ingest. It also
+means state is eventually consistent with history: there is a short window after ingest returns 202
+where the observation is stored but current state has not caught up yet.
+
+Ingest owns history and the outbox. The consumer owns current state. See [kafka.md](kafka.md) for
+delivery semantics and [outbox.md](outbox.md) for why the event is published that way.
 
 ## No-rewind rule
 
@@ -39,8 +48,12 @@ WHERE vehicle_current_state.recorded_at < EXCLUDED.recorded_at
 Both timestamps are stored: `recorded_at` is when the vehicle observed it, `received_at` is when the
 platform accepted it. Ties on `recorded_at` are broken by arrival order.
 
-Duplicate `source_event_id` values never reach the projection at all: ingest returns `DUPLICATE`
-before any write.
+There are two separate deduplication points, and they guard different things:
+
+- ingest deduplicates on `source_event_id`, the vehicle's own id for the observation, so a simulator
+  resend never creates a second history row or a second event;
+- the consumer deduplicates on `eventId` in `processed_event`, so Kafka redelivery never applies the
+  same event twice.
 
 ## Route progress
 
@@ -95,7 +108,11 @@ connectivity state.
 
 - `ConnectivityStateTest` — threshold boundaries, including the exact 15 s and 60 s edges.
 - `TelemetryIngestionIntegrationTest` — accepted/duplicate/unknown-vehicle/bad-key behaviour, the
-  no-rewind rule, and that the stored location is an SRID 4326 point.
+  event envelope, that the stored location is an SRID 4326 point, and that ingest does not write
+  current state until the event is consumed.
+- `TelemetryEventHandlerIntegrationTest` — idempotent replay, the no-rewind rule, and poison messages.
+- `VehicleStateConsumerKafkaIntegrationTest` — the same path through an in-process Kafka broker,
+  including dead-lettering.
 - `VehicleRouteProjectionIntegrationTest` — progress at the start, middle and end of the seeded M42
   shape, deviation in meters for an off-route position, unassigned vehicles, and connectivity.
 

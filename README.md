@@ -6,7 +6,8 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 ## Implemented Foundation
 
-- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, current vehicle state projection, and static schedule read API
+- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, and static schedule read API
+- Event-driven operational state: a Kafka consumer projects published telemetry into current vehicle state, deduplicating on event id, with bounded retries and a dead-letter topic
 - Operational state projection: PostGIS route progress and route deviation in meters, telemetry-age connectivity, and a no-rewind rule for late events
 - Angular operations dashboard that reads live vehicle state and scheduled route data through the backend API
 - JUnit 5 unit tests plus PostgreSQL/PostGIS integration tests run through the Maven Wrapper
@@ -17,7 +18,6 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 ## Planned Features
 
-- Operational state behind the Kafka consumer rather than inside the ingest transaction
 - Schedule deviation, headway, and bunching
 - Operator authentication and role-based authorization
 - WebSocket/STOMP realtime dashboard deltas
@@ -71,7 +71,8 @@ password: metropulse-dev-password
 Override them with `METROPULSE_OPERATOR_USERNAME` and `METROPULSE_OPERATOR_PASSWORD` in a local `.env` file.
 
 Vehicle state, including route progress and route deviation, is documented in
-[docs/operational-state.md](docs/operational-state.md).
+[docs/operational-state.md](docs/operational-state.md). The event path is documented in
+[docs/outbox.md](docs/outbox.md) and [docs/kafka.md](docs/kafka.md).
 
 The simulator posts fleet telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key, and the dashboard reads current vehicle state from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example:
 

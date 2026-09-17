@@ -22,7 +22,9 @@ Implemented:
 - transactional telemetry insert plus outbox event insert
 - scheduled outbox publisher to Kafka topic `metropulse.telemetry.v1`
 - standard API error handling with request IDs
-- current vehicle state table (`vehicle_current_state`) projected inside the ingest transaction
+- current vehicle state table (`vehicle_current_state`) projected by a Kafka consumer from published events
+- idempotency ledger (`processed_event`) claimed in the same transaction as the projection write
+- bounded consumer retries and a dead-letter topic for events that can never be applied
 - no-rewind rule so late events are stored historically without moving current state backwards
 - PostGIS route progress (`ST_LineLocatePoint`) and route deviation in meters (`ST_Distance` on geography)
 - vehicle-to-route assignment (`vehicle.assigned_route_id`) seeded for the development fleet
@@ -38,11 +40,11 @@ Not yet implemented:
 - JWT authentication and refresh tokens
 - role-based authorization
 - GTFS-style schedule importer
-- operational state behind the Kafka consumer rather than inside the ingest transaction
 - schedule deviation, headway, bunching
 - alerts, incidents, EV charging, playback, analytics
 - WebSocket realtime updates
-- Kafka consumer, MockMvc API, and charger concurrency test coverage
+- MockMvc API and charger concurrency test coverage
+- outbox publishing under broker failure
 
 ### Simulator
 
@@ -141,6 +143,9 @@ Verified successfully:
 - under `ROUTE_DEVIATION` the affected vehicle reports 179.66 m against a requested 180 m offset, and the rest stay at 0.00 m
 - under `TELEMETRY_LOSS` the affected vehicle reaches OFFLINE at 62 s while the rest stay ONLINE
 - `METROPULSE_SIMULATOR_SCENARIO` now reaches the container: Compose passes scenario, seed, interval, and ingest key through
+- `./mvnw clean verify` passes with 39 backend tests and 19 simulator tests
+- the operational-state consumer applies events arriving over a real (in-process) Kafka broker, applies a redelivered event once, and dead-letters malformed and unknown-vehicle events without blocking the events behind them
+- live Docker stack projects state through Kafka end to end: 9834 events recorded in `processed_event` by the `operational-state` consumer, with the outbox backlog draining to single digits
 
 Current limitations:
 
@@ -300,8 +305,8 @@ The best working pattern is to keep shipping small vertical slices: schema, API,
 
 ## Next Best Slices
 
-1. Move the projection behind a Kafka consumer with an idempotent processed-event table and a DLT.
-2. Derive headway between vehicles on the same route from route progress, and add bunching and gap rules.
+1. Derive headway between vehicles on the same route from route progress, and add bunching and gap rules.
+2. Add the outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on recovery.
 3. Add schedule deviation against `stop_time` once simulator movement follows trips.
 4. Add authentication with stable seeded operator users and JWT.
 5. Add publisher retry/backoff tuning and tests around failed Kafka sends.

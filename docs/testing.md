@@ -16,6 +16,8 @@ Maven install is not required. Java 21+ is.
 - Unit tests (JUnit 5): pure rule/threshold logic, for example `ConnectivityStateTest`.
 - Integration tests (Spring Boot Test + real PostgreSQL/PostGIS): the full Flyway migration set,
   PostGIS geometry behaviour, `ON CONFLICT` upsert semantics and `jsonb` columns.
+- Broker tests (Spring Kafka's in-process broker): the operational-state listener consuming real
+  records, idempotent redelivery, and dead-lettering. These need no Docker.
 
 H2 is deliberately not used. It cannot prove any of the PostGIS behaviour the projection depends on.
 
@@ -44,7 +46,8 @@ it writes to, so the same database can be reused between runs.
 
 ## Not yet covered
 
-- Kafka consumer and outbox publishing behaviour under broker failure (Kafka Testcontainer).
+- Outbox publishing under broker failure: the documented scenario where Kafka is down, telemetry
+  still commits, the outbox row stays unpublished, and the publisher drains it once Kafka returns.
 - Charger reservation concurrency (pessimistic locking).
 - API-level tests through MockMvc/`@SpringBootTest` web layer.
 - Frontend unit tests.

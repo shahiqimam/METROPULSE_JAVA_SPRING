@@ -1,6 +1,7 @@
 package com.metropulse.telemetry;
 
 import com.metropulse.operations.domain.ConnectivityState;
+import com.metropulse.support.OutboxPipeline;
 import com.metropulse.support.PostgisIntegrationTest;
 import com.metropulse.telemetry.api.TelemetryIngestRequest;
 import com.metropulse.telemetry.application.TelemetryIngestionService;
@@ -20,6 +21,9 @@ import static org.assertj.core.api.Assertions.within;
 /**
  * Exercises the PostGIS route projection against the seeded M42 route, whose shape runs west to east
  * from (-74.0060, 40.7128) to (-73.9900, 40.7178).
+ *
+ * <p>Each observation is ingested and then delivered through {@link OutboxPipeline}, because the
+ * projection is written by the operational-state consumer rather than by ingest.
  */
 class VehicleRouteProjectionIntegrationTest extends PostgisIntegrationTest {
 
@@ -33,11 +37,15 @@ class VehicleRouteProjectionIntegrationTest extends PostgisIntegrationTest {
     private TelemetryQueryService queryService;
 
     @Autowired
+    private OutboxPipeline outboxPipeline;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void clearTelemetry() {
         jdbcTemplate.update("DELETE FROM vehicle_current_state");
+        jdbcTemplate.update("DELETE FROM processed_event");
         jdbcTemplate.update("DELETE FROM outbox_event");
         jdbcTemplate.update("DELETE FROM vehicle_telemetry");
     }
@@ -121,6 +129,7 @@ class VehicleRouteProjectionIntegrationTest extends PostgisIntegrationTest {
     ) {
         ingestionService.ingest(INGEST_KEY, new TelemetryIngestRequest(
                 sourceEventId, fleetNumber, recordedAt, latitude, longitude, 24.0, 90.0, 30, 78));
+        outboxPipeline.drain();
     }
 
     private LatestVehicleTelemetry stateFor(String fleetNumber) {

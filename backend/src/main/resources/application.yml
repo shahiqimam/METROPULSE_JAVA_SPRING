@@ -19,10 +19,18 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
 
 metropulse:
   telemetry:
     ingest-key: ${METROPULSE_INGEST_KEY:dev-ingest-key}
+  operations:
+    consumer-enabled: ${METROPULSE_OPERATIONS_CONSUMER_ENABLED:true}
+    consumer-group: ${METROPULSE_OPERATIONS_CONSUMER_GROUP:metropulse-operational-state}
   outbox:
     enabled: ${METROPULSE_OUTBOX_ENABLED:true}
     topic: ${METROPULSE_OUTBOX_TOPIC:metropulse.telemetry.v1}

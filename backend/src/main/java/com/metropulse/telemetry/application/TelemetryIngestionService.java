@@ -19,6 +19,14 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Accepts telemetry observations.
+ *
+ * <p>Ingest owns history and the outbox: it validates the request, stores the observation, and writes
+ * an outbox event in the same transaction, so the database commit and the event to be published are
+ * atomic. It does not derive operational state; that is done by the operational-state consumer from
+ * the published event.
+ */
 @Service
 public class TelemetryIngestionService {
 
@@ -86,101 +94,14 @@ public class TelemetryIngestionService {
             return new TelemetryIngestResult(request.sourceEventId(), TelemetryIngestStatus.DUPLICATE);
         }
 
-        updateCurrentState(vehicleRowId, request, recordedAt, receivedAt);
-
         outboxEventWriter.write(
                 "VehicleTelemetry",
                 request.vehicleId(),
                 "VehicleTelemetryRecorded",
-                telemetryPayload(request)
+                telemetryPayload(request, receivedAt)
         );
 
         return new TelemetryIngestResult(request.sourceEventId(), TelemetryIngestStatus.ACCEPTED);
-    }
-
-    /**
-     * Projects the observation onto the vehicle's current state.
-     *
-     * <p>The row is keyed by vehicle, so the projection is an upsert. The {@code WHERE} guard on the
-     * conflict branch implements the no-rewind rule: a telemetry event that was recorded before the
-     * state we already hold is still stored historically, but it must not replace current state.
-     *
-     * <p>Route progress and route deviation are computed by PostGIS against the geometry of the route
-     * the vehicle is assigned to. Progress is the normalised position along the route line
-     * (0.0 = start, 1.0 = end); deviation is the metric distance from the vehicle to that line,
-     * measured on the geography type so the result is in meters rather than degrees.
-     */
-    private void updateCurrentState(
-            Long vehicleRowId,
-            TelemetryIngestRequest request,
-            OffsetDateTime recordedAt,
-            OffsetDateTime receivedAt
-    ) {
-        jdbcTemplate.update("""
-                INSERT INTO vehicle_current_state (
-                    vehicle_id,
-                    source_event_id,
-                    recorded_at,
-                    received_at,
-                    location,
-                    speed_kph,
-                    heading_degrees,
-                    occupancy_estimate,
-                    battery_percent,
-                    route_id,
-                    route_progress,
-                    route_deviation_meters,
-                    updated_at
-                )
-                SELECT
-                    vehicle.id,
-                    ?,
-                    ?,
-                    ?,
-                    observation.location,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    route.id,
-                    ST_LineLocatePoint(route.geometry, observation.location),
-                    ST_Distance(route.geometry::geography, observation.location::geography),
-                    now()
-                FROM vehicle
-                CROSS JOIN LATERAL (
-                    SELECT ST_SetSRID(ST_MakePoint(?, ?), 4326) AS location
-                ) AS observation
-                LEFT JOIN route ON route.id = vehicle.assigned_route_id
-                WHERE vehicle.id = ?
-                ON CONFLICT (vehicle_id) DO UPDATE
-                SET source_event_id = EXCLUDED.source_event_id,
-                    recorded_at = EXCLUDED.recorded_at,
-                    received_at = EXCLUDED.received_at,
-                    location = EXCLUDED.location,
-                    speed_kph = EXCLUDED.speed_kph,
-                    heading_degrees = EXCLUDED.heading_degrees,
-                    occupancy_estimate = EXCLUDED.occupancy_estimate,
-                    battery_percent = EXCLUDED.battery_percent,
-                    route_id = EXCLUDED.route_id,
-                    route_progress = EXCLUDED.route_progress,
-                    route_deviation_meters = EXCLUDED.route_deviation_meters,
-                    updated_at = now()
-                WHERE vehicle_current_state.recorded_at < EXCLUDED.recorded_at
-                   OR (
-                       vehicle_current_state.recorded_at = EXCLUDED.recorded_at
-                       AND vehicle_current_state.received_at <= EXCLUDED.received_at
-                   )
-                """,
-                request.sourceEventId(),
-                recordedAt,
-                receivedAt,
-                request.speedKph(),
-                request.headingDegrees(),
-                request.occupancyEstimate(),
-                request.batteryPercent(),
-                request.longitude(),
-                request.latitude(),
-                vehicleRowId);
     }
 
     private void validateIngestKey(String ingestKey) {
@@ -205,11 +126,12 @@ public class TelemetryIngestionService {
                 fleetNumber);
     }
 
-    private Map<String, Object> telemetryPayload(TelemetryIngestRequest request) {
+    private Map<String, Object> telemetryPayload(TelemetryIngestRequest request, OffsetDateTime receivedAt) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sourceEventId", request.sourceEventId());
         payload.put("vehicleId", request.vehicleId());
         payload.put("recordedAt", request.recordedAt().toString());
+        payload.put("receivedAt", receivedAt.toInstant().toString());
         payload.put("latitude", request.latitude());
         payload.put("longitude", request.longitude());
         payload.put("speedKph", request.speedKph());
