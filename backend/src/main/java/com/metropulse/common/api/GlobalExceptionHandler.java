@@ -2,6 +2,12 @@ package com.metropulse.common.api;
 
 import com.metropulse.alert.domain.AlertAlreadyClosedException;
 import com.metropulse.alert.domain.UnknownAlertException;
+import com.metropulse.ev.domain.ChargerNotAvailableException;
+import com.metropulse.ev.domain.UnknownChargerException;
+import com.metropulse.ev.domain.UnknownChargingSessionException;
+import com.metropulse.ev.domain.VehicleAlreadyChargingException;
+import com.metropulse.incident.domain.InvalidIncidentTransitionException;
+import com.metropulse.incident.domain.UnknownIncidentException;
 import com.metropulse.telemetry.domain.InvalidIngestKeyException;
 import com.metropulse.telemetry.domain.UnknownVehicleException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -59,6 +65,39 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AlertAlreadyClosedException.class)
     public ResponseEntity<ApiError> handleAlertAlreadyClosed(AlertAlreadyClosedException ex, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "ALERT_ALREADY_CLOSED", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnknownIncidentException.class)
+    public ResponseEntity<ApiError> handleUnknownIncident(UnknownIncidentException ex, HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, "UNKNOWN_INCIDENT", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidIncidentTransitionException.class)
+    public ResponseEntity<ApiError> handleInvalidIncidentTransition(
+            InvalidIncidentTransitionException ex,
+            HttpServletRequest request
+    ) {
+        return error(HttpStatus.CONFLICT, "INVALID_INCIDENT_TRANSITION", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ChargerNotAvailableException.class)
+    public ResponseEntity<ApiError> handleChargerNotAvailable(ChargerNotAvailableException ex, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "CHARGER_NOT_AVAILABLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(VehicleAlreadyChargingException.class)
+    public ResponseEntity<ApiError> handleVehicleAlreadyCharging(VehicleAlreadyChargingException ex, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "VEHICLE_ALREADY_CHARGING", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnknownChargerException.class)
+    public ResponseEntity<ApiError> handleUnknownCharger(UnknownChargerException ex, HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, "UNKNOWN_CHARGER", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnknownChargingSessionException.class)
+    public ResponseEntity<ApiError> handleUnknownChargingSession(UnknownChargingSessionException ex, HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, "UNKNOWN_CHARGING_SESSION", ex.getMessage(), request);
     }
 
     @ExceptionHandler(IllegalStateException.class)
