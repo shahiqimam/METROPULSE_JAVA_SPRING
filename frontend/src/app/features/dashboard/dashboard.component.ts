@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetry-api.service';
+import { LatestVehicleTelemetry, RouteSummary, TelemetryApiService } from '../../core/telemetry-api.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -31,6 +31,10 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
           <strong>{{ vehicles().length }}</strong>
         </div>
         <div>
+          <span>Scheduled routes</span>
+          <strong>{{ routes().length }}</strong>
+        </div>
+        <div>
           <span>Average speed</span>
           <strong>{{ averageSpeed() | number:'1.0-1' }} kph</strong>
         </div>
@@ -49,6 +53,7 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
       </section>
 
       <section class="workspace">
+        <div class="side-column">
         <aside class="access-panel" aria-label="Backend access settings">
           <h2>Backend Access</h2>
           <label>
@@ -67,6 +72,39 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
           <p class="hint">Docker dev credentials default to operator / metropulse-dev-password. Override them with METROPULSE_OPERATOR_USERNAME and METROPULSE_OPERATOR_PASSWORD.</p>
           <p class="error" *ngIf="error()">{{ error() }}</p>
         </aside>
+
+        <section class="route-panel" aria-label="Scheduled routes">
+          <div class="section-heading">
+            <h2>Scheduled Routes</h2>
+            <span>{{ routes().length }} active seed</span>
+          </div>
+
+          <div class="empty-state empty-state--compact" *ngIf="routes().length === 0">
+            No routes loaded.
+          </div>
+
+          <article class="route-row" *ngFor="let route of routes(); trackBy: trackRoute">
+            <div>
+              <h3>{{ route.code }}</h3>
+              <p>{{ route.shortName }}</p>
+            </div>
+            <dl>
+              <div>
+                <dt>Stops</dt>
+                <dd>{{ route.stopCount }}</dd>
+              </div>
+              <div>
+                <dt>Trips</dt>
+                <dd>{{ route.tripCount }}</dd>
+              </div>
+              <div>
+                <dt>Shape</dt>
+                <dd>{{ route.routePointCount }}</dd>
+              </div>
+            </dl>
+          </article>
+        </section>
+        </div>
 
         <section class="fleet-panel" aria-label="Latest vehicle telemetry">
           <div class="section-heading">
@@ -221,7 +259,7 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
 
     .status-band {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       border-top: 1px solid #233242;
       border-bottom: 1px solid #233242;
       background: #14202b;
@@ -260,7 +298,14 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
       padding-top: 20px;
     }
 
+    .side-column {
+      align-self: start;
+      display: grid;
+      gap: 16px;
+    }
+
     .access-panel,
+    .route-panel,
     .fleet-panel,
     .vehicle-card {
       border: 1px solid #243545;
@@ -268,8 +313,8 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
       background: #14202b;
     }
 
-    .access-panel {
-      align-self: start;
+    .access-panel,
+    .route-panel {
       display: grid;
       gap: 14px;
       padding: 18px;
@@ -324,6 +369,50 @@ import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetr
       border: 1px dashed #304457;
       border-radius: 8px;
       color: #9eb0bd;
+    }
+
+    .empty-state--compact {
+      min-height: 92px;
+    }
+
+    .route-row {
+      display: grid;
+      gap: 12px;
+      border-top: 1px solid #243545;
+      padding-top: 14px;
+    }
+
+    .route-row:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .route-row h3 {
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .route-row p {
+      margin-top: 4px;
+      color: #9eb0bd;
+      font-size: 13px;
+    }
+
+    .route-row dl {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .route-row dt {
+      color: #9eb0bd;
+      font-size: 12px;
+    }
+
+    .route-row dd {
+      margin-top: 3px;
+      font-size: 18px;
+      font-weight: 800;
     }
 
     .vehicle-grid {
@@ -445,9 +534,10 @@ export class DashboardComponent implements OnDestroy {
 
   protected apiBase = sessionStorage.getItem('metropulse.apiBase') ?? '/api/v1';
   protected username = sessionStorage.getItem('metropulse.username') ?? 'operator';
-  protected password = sessionStorage.getItem('metropulse.password') ?? '';
+  protected password = sessionStorage.getItem('metropulse.password') ?? 'metropulse-dev-password';
 
   protected readonly vehicles = signal<LatestVehicleTelemetry[]>([]);
+  protected readonly routes = signal<RouteSummary[]>([]);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly lastUpdated = signal<Date | null>(null);
@@ -463,6 +553,7 @@ export class DashboardComponent implements OnDestroy {
   });
 
   constructor() {
+    this.loadRoutes();
     this.loadLatestTelemetry();
     this.configureAutoRefresh();
   }
@@ -481,6 +572,7 @@ export class DashboardComponent implements OnDestroy {
     sessionStorage.setItem('metropulse.apiBase', this.apiBase);
     sessionStorage.setItem('metropulse.username', this.username);
     sessionStorage.setItem('metropulse.password', this.password);
+    this.loadRoutes();
     this.loadLatestTelemetry();
   }
 
@@ -507,6 +599,17 @@ export class DashboardComponent implements OnDestroy {
 
   protected trackVehicle(_index: number, vehicle: LatestVehicleTelemetry): string {
     return vehicle.vehicleId;
+  }
+
+  protected trackRoute(_index: number, route: RouteSummary): string {
+    return route.code;
+  }
+
+  private loadRoutes(): void {
+    this.telemetryApi.findRoutes(this.apiBase, this.username, this.password).subscribe({
+      next: (routes) => this.routes.set(routes),
+      error: () => this.routes.set([])
+    });
   }
 
   private configureAutoRefresh(): void {

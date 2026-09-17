@@ -19,6 +19,17 @@ export interface LatestVehicleTelemetry {
   batteryPercent: number | null;
 }
 
+export interface RouteSummary {
+  code: string;
+  shortName: string;
+  longName: string;
+  agencyName: string;
+  active: boolean;
+  stopCount: number;
+  tripCount: number;
+  routePointCount: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TelemetryApiService {
   private readonly http = inject(HttpClient);
@@ -29,6 +40,12 @@ export class TelemetryApiService {
     password: string
   ): Observable<LatestVehicleTelemetry[]> {
     return this.http.get<LatestVehicleTelemetry[]>(`${apiBase}/telemetry/vehicles/latest`, {
+      headers: this.authHeaders(username, password)
+    });
+  }
+
+  findRoutes(apiBase: string, username: string, password: string): Observable<RouteSummary[]> {
+    return this.http.get<RouteSummary[]>(`${apiBase}/routes`, {
       headers: this.authHeaders(username, password)
     });
   }
