@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { LatestVehicleTelemetry, RouteSummary, TelemetryApiService } from '../../core/telemetry-api.service';
+import { LatestVehicleTelemetry, RouteStop, RouteSummary, TelemetryApiService } from '../../core/telemetry-api.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -76,14 +76,21 @@ import { LatestVehicleTelemetry, RouteSummary, TelemetryApiService } from '../..
         <section class="route-panel" aria-label="Scheduled routes">
           <div class="section-heading">
             <h2>Scheduled Routes</h2>
-            <span>{{ routes().length }} active seed</span>
+            <span>{{ selectedRouteCode() ?? routes().length + ' active seed' }}</span>
           </div>
 
           <div class="empty-state empty-state--compact" *ngIf="routes().length === 0">
             No routes loaded.
           </div>
 
-          <article class="route-row" *ngFor="let route of routes(); trackBy: trackRoute">
+          <button
+            class="route-row"
+            type="button"
+            *ngFor="let route of routes(); trackBy: trackRoute"
+            (click)="loadRouteStops(route.code)"
+            [class.route-row--active]="selectedRouteCode() === route.code"
+            [attr.aria-pressed]="selectedRouteCode() === route.code"
+          >
             <div>
               <h3>{{ route.code }}</h3>
               <p>{{ route.shortName }}</p>
@@ -102,7 +109,20 @@ import { LatestVehicleTelemetry, RouteSummary, TelemetryApiService } from '../..
                 <dd>{{ route.routePointCount }}</dd>
               </div>
             </dl>
-          </article>
+          </button>
+
+          <div class="stop-pattern" *ngIf="routeStops().length > 0">
+            <h3>Stop Pattern</h3>
+            <ol>
+              <li *ngFor="let stop of routeStops(); trackBy: trackStop">
+                <span>{{ stop.stopSequence }}</span>
+                <div>
+                  <strong>{{ stop.stopName }}</strong>
+                  <small>{{ stop.stopCode }} · {{ formatServiceTime(stop.plannedArrivalSeconds) }}</small>
+                </div>
+              </li>
+            </ol>
+          </div>
         </section>
         </div>
 
@@ -378,13 +398,19 @@ import { LatestVehicleTelemetry, RouteSummary, TelemetryApiService } from '../..
     .route-row {
       display: grid;
       gap: 12px;
-      border-top: 1px solid #243545;
-      padding-top: 14px;
+      width: 100%;
+      border: 1px solid #243545;
+      border-radius: 6px;
+      background: #0f1720;
+      color: inherit;
+      padding: 14px;
+      text-align: left;
+      cursor: pointer;
     }
 
-    .route-row:first-of-type {
-      border-top: 0;
-      padding-top: 0;
+    .route-row--active {
+      border-color: #3fc4b4;
+      background: #102b2a;
     }
 
     .route-row h3 {
@@ -413,6 +439,54 @@ import { LatestVehicleTelemetry, RouteSummary, TelemetryApiService } from '../..
       margin-top: 3px;
       font-size: 18px;
       font-weight: 800;
+    }
+
+    .stop-pattern {
+      border-top: 1px solid #243545;
+      padding-top: 14px;
+    }
+
+    .stop-pattern h3 {
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .stop-pattern ol {
+      display: grid;
+      gap: 10px;
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .stop-pattern li {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .stop-pattern li > span {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: #233242;
+      color: #91eadf;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .stop-pattern strong,
+    .stop-pattern small {
+      display: block;
+    }
+
+    .stop-pattern small {
+      margin-top: 2px;
+      color: #9eb0bd;
+      font-size: 12px;
     }
 
     .vehicle-grid {
@@ -538,6 +612,8 @@ export class DashboardComponent implements OnDestroy {
 
   protected readonly vehicles = signal<LatestVehicleTelemetry[]>([]);
   protected readonly routes = signal<RouteSummary[]>([]);
+  protected readonly routeStops = signal<RouteStop[]>([]);
+  protected readonly selectedRouteCode = signal<string | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly lastUpdated = signal<Date | null>(null);
@@ -605,10 +681,40 @@ export class DashboardComponent implements OnDestroy {
     return route.code;
   }
 
+  protected trackStop(_index: number, stop: RouteStop): string {
+    return stop.stopCode;
+  }
+
+  protected loadRouteStops(routeCode: string): void {
+    this.selectedRouteCode.set(routeCode);
+    this.telemetryApi.findRouteStops(this.apiBase, this.username, this.password, routeCode).subscribe({
+      next: (stops) => this.routeStops.set(stops),
+      error: () => this.routeStops.set([])
+    });
+  }
+
+  protected formatServiceTime(totalSeconds: number): string {
+    const hours = Math.floor(totalSeconds / 3600) % 24;
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
   private loadRoutes(): void {
     this.telemetryApi.findRoutes(this.apiBase, this.username, this.password).subscribe({
-      next: (routes) => this.routes.set(routes),
-      error: () => this.routes.set([])
+      next: (routes) => {
+        this.routes.set(routes);
+        if (routes.length > 0) {
+          this.loadRouteStops(routes[0].code);
+        } else {
+          this.selectedRouteCode.set(null);
+          this.routeStops.set([]);
+        }
+      },
+      error: () => {
+        this.routes.set([]);
+        this.selectedRouteCode.set(null);
+        this.routeStops.set([]);
+      }
     });
   }
 

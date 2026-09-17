@@ -30,6 +30,16 @@ export interface RouteSummary {
   routePointCount: number;
 }
 
+export interface RouteStop {
+  stopCode: string;
+  stopName: string;
+  stopSequence: number;
+  plannedArrivalSeconds: number;
+  plannedDepartureSeconds: number;
+  latitude: number;
+  longitude: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TelemetryApiService {
   private readonly http = inject(HttpClient);
@@ -46,6 +56,12 @@ export class TelemetryApiService {
 
   findRoutes(apiBase: string, username: string, password: string): Observable<RouteSummary[]> {
     return this.http.get<RouteSummary[]>(`${apiBase}/routes`, {
+      headers: this.authHeaders(username, password)
+    });
+  }
+
+  findRouteStops(apiBase: string, username: string, password: string, routeCode: string): Observable<RouteStop[]> {
+    return this.http.get<RouteStop[]>(`${apiBase}/routes/${encodeURIComponent(routeCode)}/stops`, {
       headers: this.authHeaders(username, password)
     });
   }
