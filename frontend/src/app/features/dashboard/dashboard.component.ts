@@ -72,7 +72,7 @@ interface LatestVehicleTelemetry {
             <input [(ngModel)]="password" autocomplete="current-password" type="password" placeholder="Spring generated password" />
           </label>
           <button class="connect-button" type="button" (click)="saveAndLoad()">Connect</button>
-          <p class="hint">Use the generated development password from backend startup logs until proper operator login is added.</p>
+          <p class="hint">Docker dev credentials default to operator / metropulse-dev-password. Override them with METROPULSE_OPERATOR_USERNAME and METROPULSE_OPERATOR_PASSWORD.</p>
           <p class="error" *ngIf="error()">{{ error() }}</p>
         </aside>
 
@@ -419,7 +419,7 @@ export class DashboardComponent {
   private readonly http = inject(HttpClient);
 
   protected apiBase = sessionStorage.getItem('metropulse.apiBase') ?? '/api/v1';
-  protected username = sessionStorage.getItem('metropulse.username') ?? 'user';
+  protected username = sessionStorage.getItem('metropulse.username') ?? 'operator';
   protected password = sessionStorage.getItem('metropulse.password') ?? '';
 
   protected readonly vehicles = signal<LatestVehicleTelemetry[]>([]);
