@@ -9,5 +9,9 @@ metropulse:
     seed: ${METROPULSE_SIMULATOR_SEED:42}
     interval: ${METROPULSE_SIMULATOR_INTERVAL:PT2S}
     initial-delay: ${METROPULSE_SIMULATOR_INITIAL_DELAY:PT5S}
+    scenario: ${METROPULSE_SIMULATOR_SCENARIO:NORMAL_OPERATION}
     vehicle-ids:
       - BUS-042
+      - BUS-101
+      - BUS-204
+      - BUS-317

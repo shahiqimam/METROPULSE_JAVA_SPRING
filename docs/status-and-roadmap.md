@@ -12,7 +12,7 @@ Implemented:
 
 - Spring Boot backend module
 - health endpoint at `GET /api/v1/health`
-- Flyway migrations for the foundation schema, development vehicle seed, static schedule schema, and schedule seed
+- Flyway migrations for the foundation schema, development fleet seed, static schedule schema, and schedule seed
 - PostgreSQL/PostGIS schema for users, vehicles, telemetry, and outbox events
 - telemetry ingest endpoint at `POST /api/v1/telemetry/ingest`
 - ingest key validation through `X-Ingest-Key`
@@ -41,15 +41,15 @@ Not yet implemented:
 Implemented:
 
 - Java Spring Boot simulator module
-- deterministic scheduled telemetry emitter
-- configurable ingest URL, ingest key, seed, interval, and vehicle IDs
+- deterministic scheduled telemetry emitter for a small multi-vehicle fleet
+- configurable ingest URL, ingest key, seed, interval, vehicle IDs, and operating scenario
 - synthetic route-like movement around a New York City development path
 - Docker Compose wiring to send simulator events into the backend
 
 Not yet implemented:
 
-- named scenarios such as bunching, route deviation, telemetry loss, long dwell, low battery, recovery
-- multi-route and multi-vehicle fleet simulation beyond configurable IDs
+- multi-route fleet simulation beyond the current development route
+- scenario-specific tests
 - simulator test coverage
 
 ### Frontend
@@ -112,11 +112,12 @@ Verified successfully:
 - stable Docker dashboard credentials work: `operator / metropulse-dev-password`
 - `.dockerignore` keeps Docker build contexts small; frontend image rebuilt successfully after the optimization
 - static schedule migrations apply through Flyway to schema version 4
-- development schedule seed creates 1 agency, 1 route, 5 stops, 1 trip, and 5 stop times
+- development seeds create 4 vehicles, 1 agency, 1 route, 5 stops, 1 trip, and 5 stop times
 - seeded route `M42` stores a 5-point PostGIS route geometry
 - schedule read APIs return route summary and ordered stop pattern data with authentication
 - outbox publisher drains unpublished rows to Kafka; 604 existing rows were marked published with no errors
 - Kafka topic `metropulse.telemetry.v1` is created with 3 partitions and contains telemetry envelope messages
+- simulator can emit four seeded development vehicles per tick with scenario-specific speed, dwell, occupancy, and battery patterns
 
 Current limitation:
 
@@ -281,5 +282,5 @@ The best working pattern is to keep shipping small vertical slices: schema, API,
 1. Add Maven wrapper and backend test scaffolding.
 2. Add authentication with stable seeded operator users and JWT.
 3. Add static schedule schema and a small fictional route/stop seed.
-4. Expand simulator from one vehicle to multiple scenario-capable vehicles.
-5. Add publisher retry/backoff tuning and tests around failed Kafka sends.
+4. Add publisher retry/backoff tuning and tests around failed Kafka sends.
+5. Add operational projections from Kafka events.

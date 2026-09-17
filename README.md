@@ -8,7 +8,7 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 - Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, latest-vehicle telemetry read API, and static schedule read API
 - Angular operations dashboard that reads live telemetry and scheduled route data through the backend API
-- Java simulator that emits deterministic synthetic vehicle telemetry into the backend on a schedule
+- Java simulator that emits deterministic multi-vehicle scenario telemetry into the backend on a schedule
 - PostgreSQL/PostGIS, Kafka, Redis, backend, frontend, and simulator wired with Docker Compose
 - Development nginx proxy for containerized frontend `/api` calls
 - Architecture docs, ADRs, Jenkins pipeline, and environment examples
@@ -64,7 +64,7 @@ password: metropulse-dev-password
 
 Override them with `METROPULSE_OPERATOR_USERNAME` and `METROPULSE_OPERATOR_PASSWORD` in a local `.env` file.
 
-The simulator posts to `POST /api/v1/telemetry/ingest` with the development ingest key and the dashboard reads latest vehicle positions from `GET /api/v1/telemetry/vehicles/latest`.
+The simulator posts multi-vehicle scenario telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key and the dashboard reads latest vehicle positions from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example `BUNCHING`, `LONG_DWELL`, or `EV_LOW_BATTERY`.
 
 ## Synthetic Data Notice
 

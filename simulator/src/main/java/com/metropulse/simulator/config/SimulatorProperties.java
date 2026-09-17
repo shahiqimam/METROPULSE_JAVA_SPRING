@@ -1,5 +1,6 @@
 package com.metropulse.simulator.config;
 
+import com.metropulse.simulator.scenario.ScenarioType;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -12,7 +13,8 @@ public class SimulatorProperties {
     private String ingestKey = "dev-ingest-key";
     private long seed = 42L;
     private Duration interval = Duration.ofSeconds(2);
-    private List<String> vehicleIds = List.of("BUS-042");
+    private ScenarioType scenario = ScenarioType.NORMAL_OPERATION;
+    private List<String> vehicleIds = List.of("BUS-042", "BUS-101", "BUS-204", "BUS-317");
 
     public String getIngestUrl() {
         return ingestUrl;
@@ -44,6 +46,14 @@ public class SimulatorProperties {
 
     public void setInterval(Duration interval) {
         this.interval = interval;
+    }
+
+    public ScenarioType getScenario() {
+        return scenario;
+    }
+
+    public void setScenario(ScenarioType scenario) {
+        this.scenario = scenario;
     }
 
     public List<String> getVehicleIds() {
