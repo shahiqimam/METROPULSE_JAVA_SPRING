@@ -49,16 +49,19 @@ Not yet implemented:
 Implemented:
 
 - Java Spring Boot simulator module
-- deterministic scheduled telemetry emitter for a small multi-vehicle fleet
-- configurable ingest URL, ingest key, seed, interval, vehicle IDs, and operating scenario
-- synthetic route-like movement around a New York City development path
-- Docker Compose wiring to send simulator events into the backend
+- deterministic scheduled telemetry emitter for a multi-vehicle fleet
+- movement along the seeded route geometry: distance-based progress, wrapping at the end of the shape
+- evenly spaced fleet so headway and bunching are consequences of speed, not scripted outcomes
+- scenario behaviour for bunching, route deviation, telemetry loss, long dwell, low battery, multi-incident, and recovery
+- configurable ingest URL, ingest key, seed, interval, vehicle IDs, scenario, and route points
+- Docker Compose wiring, including scenario, seed, and interval overrides
+- unit tests for the route path and every scenario
 
 Not yet implemented:
 
-- multi-route fleet simulation beyond the current development route
-- scenario-specific tests
-- simulator test coverage
+- multi-route fleet simulation beyond the seeded development route
+- schedule-aware movement (trips and stop times rather than a continuous loop)
+- dwell at actual stop locations
 
 ### Frontend
 
@@ -133,11 +136,16 @@ Verified successfully:
 - route progress is 0.0 at the seeded M42 start point, 1.0 at its end point, and in between elsewhere
 - off-route positions report deviation in meters, and unassigned vehicles report null rather than a fabricated 0.0
 - live Docker stack returns route code, progress, deviation, telemetry age, and connectivity for all four simulated vehicles
+- `./mvnw clean verify` passes end to end: 23 backend tests and 19 simulator tests
+- under `NORMAL_OPERATION` all four simulated vehicles report 0.00 m route deviation, evenly spaced around the shape
+- under `ROUTE_DEVIATION` the affected vehicle reports 179.66 m against a requested 180 m offset, and the rest stay at 0.00 m
+- under `TELEMETRY_LOSS` the affected vehicle reaches OFFLINE at 62 s while the rest stay ONLINE
+- `METROPULSE_SIMULATOR_SCENARIO` now reaches the container: Compose passes scenario, seed, interval, and ingest key through
 
 Current limitations:
 
 - Testcontainers cannot start containers on this host: docker-java fails API negotiation against Docker Engine 29 with HTTP 400, although the Docker CLI works. Integration tests were therefore run against the Compose stack's real PostGIS database through `METROPULSE_TEST_DB_URL`. The Testcontainers path remains the default and is what CI should exercise.
-- The simulator's synthetic movement path predates the seeded route geometry, so simulated vehicles sit up to roughly 260 m from the M42 shape. The deviation numbers are real; the simulator path should be generated from route geometry in a later slice.
+- The simulator drives a continuous loop of the route shape rather than scheduled trips, so schedule deviation cannot be derived from it yet. Trip-aware movement is needed before punctuality means anything.
 
 ## Recommended Phase Plan
 
@@ -292,8 +300,8 @@ The best working pattern is to keep shipping small vertical slices: schema, API,
 
 ## Next Best Slices
 
-1. Drive the simulator along the seeded route geometry so deviation is a scenario input, not an artefact.
-2. Move the projection behind a Kafka consumer with an idempotent processed-event table and a DLT.
-3. Add schedule deviation against `stop_time`, then headway and bunching rules.
+1. Move the projection behind a Kafka consumer with an idempotent processed-event table and a DLT.
+2. Derive headway between vehicles on the same route from route progress, and add bunching and gap rules.
+3. Add schedule deviation against `stop_time` once simulator movement follows trips.
 4. Add authentication with stable seeded operator users and JWT.
 5. Add publisher retry/backoff tuning and tests around failed Kafka sends.

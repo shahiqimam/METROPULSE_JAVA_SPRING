@@ -16,6 +16,21 @@ public class SimulatorProperties {
     private ScenarioType scenario = ScenarioType.NORMAL_OPERATION;
     private List<String> vehicleIds = List.of("BUS-042", "BUS-101", "BUS-204", "BUS-317");
 
+    /**
+     * The route shape vehicles drive along, as "latitude,longitude" pairs.
+     *
+     * <p>The default is the seeded M42 shape from the backend's V4 migration. It has to match the
+     * seeded geometry, because the backend projects telemetry onto that geometry: a mismatch would
+     * show up as route deviation that no scenario asked for.
+     */
+    private List<String> routePoints = List.of(
+            "40.7128,-74.0060",
+            "40.7140,-74.0020",
+            "40.7152,-73.9980",
+            "40.7163,-73.9945",
+            "40.7178,-73.9900"
+    );
+
     public String getIngestUrl() {
         return ingestUrl;
     }
@@ -54,6 +69,14 @@ public class SimulatorProperties {
 
     public void setScenario(ScenarioType scenario) {
         this.scenario = scenario;
+    }
+
+    public List<String> getRoutePoints() {
+        return routePoints;
+    }
+
+    public void setRoutePoints(List<String> routePoints) {
+        this.routePoints = routePoints;
     }
 
     public List<String> getVehicleIds() {

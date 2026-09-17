@@ -10,7 +10,7 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 - Operational state projection: PostGIS route progress and route deviation in meters, telemetry-age connectivity, and a no-rewind rule for late events
 - Angular operations dashboard that reads live vehicle state and scheduled route data through the backend API
 - JUnit 5 unit tests plus PostgreSQL/PostGIS integration tests run through the Maven Wrapper
-- Java simulator that emits deterministic multi-vehicle scenario telemetry into the backend on a schedule
+- Java simulator that drives a deterministic fleet along the seeded route geometry, with scenarios for bunching, route deviation, telemetry loss, long dwell, low battery, multi-incident, and recovery
 - PostgreSQL/PostGIS, Kafka, Redis, backend, frontend, and simulator wired with Docker Compose
 - Development nginx proxy for containerized frontend `/api` calls
 - Architecture docs, ADRs, Jenkins pipeline, and environment examples
@@ -73,7 +73,13 @@ Override them with `METROPULSE_OPERATOR_USERNAME` and `METROPULSE_OPERATOR_PASSW
 Vehicle state, including route progress and route deviation, is documented in
 [docs/operational-state.md](docs/operational-state.md).
 
-The simulator posts multi-vehicle scenario telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key and the dashboard reads latest vehicle positions from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example `BUNCHING`, `LONG_DWELL`, or `EV_LOW_BATTERY`.
+The simulator posts fleet telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key, and the dashboard reads current vehicle state from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example:
+
+```bash
+METROPULSE_SIMULATOR_SCENARIO=ROUTE_DEVIATION docker compose up -d simulator --force-recreate
+```
+
+Scenarios and simulator configuration are documented in [docs/simulator.md](docs/simulator.md).
 
 ## Synthetic Data Notice
 
