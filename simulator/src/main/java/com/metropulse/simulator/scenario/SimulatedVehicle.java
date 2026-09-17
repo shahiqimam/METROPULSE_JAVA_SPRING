@@ -50,6 +50,17 @@ public final class SimulatedVehicle {
         this.routeProgress = next - Math.floor(next);
     }
 
+    /**
+     * Holds the vehicle at a position it cannot advance past this tick.
+     *
+     * <p>Used when the vehicle has caught the one in front: it keeps its place in the queue and its
+     * reported speed drops to what it actually achieved.
+     */
+    public void holdAt(double routeProgress) {
+        this.routeProgress = routeProgress;
+        this.speedKph = 0.0;
+    }
+
     /** Drains the battery, floored so a long run does not produce negative percentages. */
     public void drainBattery(double percentDrained) {
         this.batteryPercent = Math.max(1.0, batteryPercent - percentDrained);

@@ -60,13 +60,47 @@ class FleetSimulatorTest {
     }
 
     @Test
-    void bunchingLetsTheFollowerCloseTheGapOnASlowLeader() {
+    void bunchingClosesTheGapBehindTheSlowLeader() {
         FleetSimulator simulator = simulator(ScenarioType.BUNCHING);
-        double initialGap = gapBetweenLeaderAndFollower(simulator);
+        double initialTightestGap = tightestGap(simulator);
 
         IntStream.range(0, 120).forEach(tick -> simulator.tick(NOW));
 
-        assertThat(gapBetweenLeaderAndFollower(simulator)).isLessThan(initialGap);
+        // Somewhere in the fleet, two vehicles are now closer together than any pair started out.
+        assertThat(tightestGap(simulator)).isLessThan(initialTightestGap);
+    }
+
+    @Test
+    void aFollowerHoldsStationBehindASlowLeaderRatherThanDrivingThroughIt() {
+        FleetSimulator simulator = simulator(ScenarioType.BUNCHING);
+
+        // BUS-042 crawls; the vehicle behind it closes up and then has to queue.
+        IntStream.range(0, 400).forEach(tick -> simulator.tick(NOW));
+
+        SimulatedVehicle slowLeader = simulator.fleet().getFirst();
+        double closest = simulator.fleet().stream()
+                .filter(vehicle -> !vehicle.vehicleId().equals(slowLeader.vehicleId()))
+                .mapToDouble(vehicle -> gapBehind(vehicle, slowLeader))
+                .min()
+                .orElseThrow();
+
+        // Someone is queued right behind it, and nobody has passed through it.
+        assertThat(closest).isLessThan(0.05);
+        assertThat(closest).isGreaterThanOrEqualTo(0.0);
+    }
+
+    @Test
+    void bunchingPersistsOnceItHasFormed() {
+        FleetSimulator simulator = simulator(ScenarioType.BUNCHING);
+        IntStream.range(0, 400).forEach(tick -> simulator.tick(NOW));
+
+        // Once a queue has formed behind the slow leader it should still be there later, rather than
+        // dissolving as vehicles drive through each other.
+        double before = tightestGap(simulator);
+        IntStream.range(0, 120).forEach(tick -> simulator.tick(NOW));
+
+        assertThat(tightestGap(simulator)).isLessThan(0.08);
+        assertThat(before).isLessThan(0.08);
     }
 
     @Test
@@ -185,11 +219,28 @@ class FleetSimulatorTest {
                 .orElseThrow(() -> new AssertionError("No payload for " + vehicleId));
     }
 
-    private double gapBetweenLeaderAndFollower(FleetSimulator simulator) {
-        double leader = simulator.fleet().get(1).routeProgress();
-        double follower = simulator.fleet().getFirst().routeProgress();
-        double gap = leader - follower;
+    /** Forward distance, as a fraction of the shape, from a follower to a leader. */
+    private double gapBehind(SimulatedVehicle follower, SimulatedVehicle leader) {
+        double gap = leader.routeProgress() - follower.routeProgress();
         return gap < 0 ? gap + 1.0 : gap;
+    }
+
+    /** The smallest gap between any two consecutive vehicles. */
+    private double tightestGap(FleetSimulator simulator) {
+        List<SimulatedVehicle> fleet = simulator.fleet();
+        double tightest = 1.0;
+        for (SimulatedVehicle follower : fleet) {
+            for (SimulatedVehicle leader : fleet) {
+                if (follower == leader) {
+                    continue;
+                }
+                double gap = gapBehind(follower, leader);
+                if (gap > 0) {
+                    tightest = Math.min(tightest, gap);
+                }
+            }
+        }
+        return tightest;
     }
 
     /** Shortest distance from a reported position to the route shape, sampled along the line. */

@@ -29,6 +29,10 @@ Implemented:
 - PostGIS route progress (`ST_LineLocatePoint`) and route deviation in meters (`ST_Distance` on geography)
 - vehicle-to-route assignment (`vehicle.assigned_route_id`) seeded for the development fleet
 - telemetry-age connectivity classification (ONLINE/STALE/OFFLINE)
+- headway between consecutive vehicles from route progress, with a documented reference-speed fallback for stopped vehicles
+- bunching and excessive-gap rules with a 90-second persistence window, confirmation, and recovery
+- headway read APIs at `GET /api/v1/routes/{code}/headway` and `GET /api/v1/routes/headway/conditions`
+- route geometry read API at `GET /api/v1/routes/{code}/geometry`
 - current vehicle state read endpoint at `GET /api/v1/telemetry/vehicles/latest`
 - Maven Wrapper so the build runs without a host Maven install
 - JUnit 5 unit tests and PostgreSQL/PostGIS integration tests
@@ -40,7 +44,7 @@ Not yet implemented:
 - JWT authentication and refresh tokens
 - role-based authorization
 - GTFS-style schedule importer
-- schedule deviation, headway, bunching
+- schedule deviation and punctuality
 - alerts, incidents, EV charging, playback, analytics
 - WebSocket realtime updates
 - MockMvc API and charger concurrency test coverage
@@ -76,8 +80,11 @@ Implemented:
 - Docker and Angular dev proxy support for `/api`
 - auto-refresh toggle with 10-second polling
 - vehicle summary cards, fleet summary metrics, scheduled route summary, and route stop pattern
-- per-vehicle connectivity pill, route progress bar, and route deviation readout
-- fleet counters for offline and off-route vehicles
+- network map drawn from the route's stored PostGIS geometry, with stops, heading-oriented vehicles, and off-route halos
+- fleet list ordered worst-state-first with status stated in words
+- headway panel with a shared threshold scale and sustained/watching conditions
+- counters for off-route, offline, low battery, and sustained headway conditions
+- connection settings moved into a drawer
 - extracted telemetry API service
 
 Not yet implemented:
@@ -146,6 +153,9 @@ Verified successfully:
 - `./mvnw clean verify` passes with 39 backend tests and 19 simulator tests
 - the operational-state consumer applies events arriving over a real (in-process) Kafka broker, applies a redelivered event once, and dead-letters malformed and unknown-vehicle events without blocking the events behind them
 - live Docker stack projects state through Kafka end to end: 9834 events recorded in `processed_event` by the `operational-state` consumer, with the outbox backlog draining to single digits
+- `./mvnw clean verify` passes with 86 backend tests and 21 simulator tests
+- BUNCHING scenario produces a real pack in the live stack: BUS-317 queued 12 m behind BUS-042 classified BUNCHING, a 1005 m hole to BUS-101 classified EXCESSIVE_GAP, both sustained past the 90-second window
+- conditions clear when spacing recovers, and a pair that deteriorates again starts a fresh window
 
 Current limitations:
 
@@ -305,7 +315,7 @@ The best working pattern is to keep shipping small vertical slices: schema, API,
 
 ## Next Best Slices
 
-1. Derive headway between vehicles on the same route from route progress, and add bunching and gap rules.
+1. Turn headway conditions into deduplicated alerts with acknowledge and close, then incidents.
 2. Add the outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on recovery.
 3. Add schedule deviation against `stop_time` once simulator movement follows trips.
 4. Add authentication with stable seeded operator users and JWT.

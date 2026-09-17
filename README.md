@@ -9,6 +9,7 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 - Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, and static schedule read API
 - Event-driven operational state: a Kafka consumer projects published telemetry into current vehicle state, deduplicating on event id, with bounded retries and a dead-letter topic
 - Operational state projection: PostGIS route progress and route deviation in meters, telemetry-age connectivity, and a no-rewind rule for late events
+- Headway between consecutive vehicles, with bunching and excessive-gap rules that require a 90-second persistence window and clear on recovery
 - Angular operations dashboard that reads live vehicle state and scheduled route data through the backend API
 - JUnit 5 unit tests plus PostgreSQL/PostGIS integration tests run through the Maven Wrapper
 - Java simulator that drives a deterministic fleet along the seeded route geometry, with scenarios for bunching, route deviation, telemetry loss, long dwell, low battery, multi-incident, and recovery
@@ -18,7 +19,7 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 ## Planned Features
 
-- Schedule deviation, headway, and bunching
+- Schedule deviation and punctuality
 - Operator authentication and role-based authorization
 - WebSocket/STOMP realtime dashboard deltas
 - Fleet, route, stop, trip, incident, and charging workflows
@@ -70,8 +71,8 @@ password: metropulse-dev-password
 
 Override them with `METROPULSE_OPERATOR_USERNAME` and `METROPULSE_OPERATOR_PASSWORD` in a local `.env` file.
 
-Vehicle state, including route progress and route deviation, is documented in
-[docs/operational-state.md](docs/operational-state.md). The event path is documented in
+Vehicle state is documented in [docs/operational-state.md](docs/operational-state.md) and the spacing
+rules in [docs/headway-bunching.md](docs/headway-bunching.md). The event path is documented in
 [docs/outbox.md](docs/outbox.md) and [docs/kafka.md](docs/kafka.md).
 
 The simulator posts fleet telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key, and the dashboard reads current vehicle state from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example:

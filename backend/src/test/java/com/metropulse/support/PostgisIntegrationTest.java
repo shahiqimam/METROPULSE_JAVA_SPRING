@@ -1,6 +1,7 @@
 package com.metropulse.support;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -27,6 +28,7 @@ import org.testcontainers.utility.DockerImageName;
         "metropulse.outbox.enabled=false",
         "metropulse.operations.consumer-enabled=false"
 })
+@Import(MutableClock.Config.class)
 public abstract class PostgisIntegrationTest {
 
     private static final String EXTERNAL_URL = System.getenv("METROPULSE_TEST_DB_URL");

@@ -7,6 +7,7 @@ import com.metropulse.simulator.telemetry.TelemetryIngestPayload;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
@@ -27,6 +28,16 @@ public class FleetSimulator {
 
     /** Percent of battery used per kilometre; a portfolio figure, not a measured vehicle spec. */
     private static final double BATTERY_PERCENT_PER_KM = 0.6;
+
+    /**
+     * How close a vehicle may get to the one ahead of it before it has to hold station.
+     *
+     * <p>Without this, a fast follower drives straight through a slow leader and out the other side,
+     * and bunching never lasts: the pair re-forms, swaps roles and dissolves every few ticks. Real
+     * vehicles queue behind each other, and it is that queueing which makes bunching a sustained
+     * condition rather than a flicker.
+     */
+    private static final double MINIMUM_FOLLOWING_GAP_METERS = 12.0;
 
     private final RoutePath route;
     private final ScenarioType scenario;
@@ -73,6 +84,12 @@ public class FleetSimulator {
         tickNumber++;
         List<TelemetryIngestPayload> payloads = new ArrayList<>(fleet.size());
 
+        // The queue order is taken before anyone moves. Deciding it afterwards would let a fast
+        // follower that overshot its leader within one tick be treated as the leader, and the rule
+        // would then push the vehicle it just passed backwards.
+        List<SimulatedVehicle> queueOrder = new ArrayList<>(fleet);
+        queueOrder.sort(Comparator.comparingDouble(SimulatedVehicle::routeProgress));
+
         for (int index = 0; index < fleet.size(); index++) {
             SimulatedVehicle vehicle = fleet.get(index);
             ScenarioAdjustment adjustment = ScenarioProfile.adjustmentFor(scenario, index, tickNumber);
@@ -84,6 +101,13 @@ public class FleetSimulator {
             vehicle.advance(metersTravelled / route.lengthMeters());
             vehicle.drainBattery(metersTravelled / 1000.0 * BATTERY_PERCENT_PER_KM);
             vehicle.setOccupancyEstimate(nextOccupancy(vehicle.occupancyEstimate()));
+        }
+
+        holdVehiclesBehindTheirLeaders(queueOrder);
+
+        for (int index = 0; index < fleet.size(); index++) {
+            SimulatedVehicle vehicle = fleet.get(index);
+            ScenarioAdjustment adjustment = ScenarioProfile.adjustmentFor(scenario, index, tickNumber);
 
             if (!adjustment.reporting()) {
                 continue;
@@ -106,6 +130,37 @@ public class FleetSimulator {
         }
 
         return payloads;
+    }
+
+    /**
+     * Stops any vehicle that has caught the one ahead of it from passing through it.
+     *
+     * <p>Vehicles are walked from the front of the queue backwards, so a queue forms properly: the
+     * second vehicle holds behind the first, the third behind the second, and so on.
+     *
+     * @param queueOrder the fleet ordered by position as it was before this tick's movement
+     */
+    private void holdVehiclesBehindTheirLeaders(List<SimulatedVehicle> queueOrder) {
+        double minimumGap = MINIMUM_FOLLOWING_GAP_METERS / route.lengthMeters();
+
+        for (int index = queueOrder.size() - 2; index >= 0; index--) {
+            SimulatedVehicle follower = queueOrder.get(index);
+            SimulatedVehicle leader = queueOrder.get(index + 1);
+
+            if (forwardGap(follower, leader) < minimumGap) {
+                follower.holdAt(wrap(leader.routeProgress() - minimumGap));
+            }
+        }
+    }
+
+    /** Distance forward along the shape from the follower to the leader, as a fraction of the shape. */
+    private static double forwardGap(SimulatedVehicle follower, SimulatedVehicle leader) {
+        double gap = leader.routeProgress() - follower.routeProgress();
+        return gap < 0 ? gap + 1.0 : gap;
+    }
+
+    private static double wrap(double progress) {
+        return progress - Math.floor(progress);
     }
 
     public List<SimulatedVehicle> fleet() {

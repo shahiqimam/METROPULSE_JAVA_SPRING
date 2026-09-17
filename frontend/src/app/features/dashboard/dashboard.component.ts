@@ -4,11 +4,13 @@ import { finalize } from 'rxjs';
 import {
   LatestVehicleTelemetry,
   RouteGeometryPoint,
+  RouteHeadwaySnapshot,
   RouteStop,
   RouteSummary,
   TelemetryApiService
 } from '../../core/telemetry-api.service';
 import { FleetPanelComponent } from './components/fleet-panel.component';
+import { HeadwayPanelComponent } from './components/headway-panel.component';
 import { Metric, MetricBarComponent } from './components/metric-bar.component';
 import { NetworkMapComponent } from './components/network-map.component';
 import { RoutePanelComponent } from './components/route-panel.component';
@@ -30,6 +32,7 @@ const REFRESH_INTERVAL_MS = 5000;
   imports: [
     CommonModule,
     FleetPanelComponent,
+    HeadwayPanelComponent,
     MetricBarComponent,
     NetworkMapComponent,
     RoutePanelComponent,
@@ -92,6 +95,7 @@ const REFRESH_INTERVAL_MS = 5000;
         />
 
         <div class="sidebar">
+          <app-headway-panel [snapshot]="headway()" />
           <app-fleet-panel
             [vehicles]="vehicles()"
             [selectedVehicleId]="selectedVehicleId()"
@@ -318,7 +322,7 @@ const REFRESH_INTERVAL_MS = 5000;
 
     .sidebar {
       display: grid;
-      grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+      grid-template-rows: auto minmax(0, 3fr) minmax(0, 2fr);
       gap: 12px;
       min-height: 0;
     }
@@ -367,6 +371,7 @@ export class DashboardComponent implements OnDestroy {
   protected readonly routes = signal<RouteSummary[]>([]);
   protected readonly routeStops = signal<RouteStop[]>([]);
   protected readonly routeGeometry = signal<RouteGeometryPoint[]>([]);
+  protected readonly headway = signal<RouteHeadwaySnapshot | null>(null);
   protected readonly selectedRouteCode = signal<string | null>(null);
   protected readonly selectedVehicleId = signal<string | null>(null);
   protected readonly hoveredVehicleId = signal<string | null>(null);
@@ -414,10 +419,23 @@ export class DashboardComponent implements OnDestroy {
       { label: 'Off route', value: String(offRoute), detail: 'over 100 m from shape', role: offRoute > 0 ? 'serious' : null },
       { label: 'No telemetry', value: String(offline), detail: `${stale} stale`, role: offline > 0 ? 'critical' : null },
       { label: 'Low battery', value: String(lowBattery), detail: 'at or under 20%', role: lowBattery > 0 ? 'serious' : null },
+      {
+        label: 'Headway',
+        value: String(this.sustainedConditions()),
+        detail: this.watchedConditions() > 0 ? `${this.watchedConditions()} being watched` : 'pairs out of range',
+        role: this.sustainedConditions() > 0 ? 'critical' : null
+      },
       { label: 'Avg speed', value: `${this.averageSpeed().toFixed(1)}`, detail: 'kph across fleet' },
       { label: 'Avg load', value: `${Math.round(this.averageOccupancy())}`, detail: 'passengers on board' }
     ];
   });
+
+  private readonly sustainedConditions = computed(
+    () => (this.headway()?.conditions ?? []).filter((condition) => condition.confirmed).length
+  );
+  private readonly watchedConditions = computed(
+    () => (this.headway()?.conditions ?? []).filter((condition) => !condition.confirmed).length
+  );
 
   private readonly averageSpeed = computed(() => this.average((vehicle) => vehicle.speedKph));
   private readonly averageOccupancy = computed(() => this.average((vehicle) => vehicle.occupancyEstimate));
@@ -450,6 +468,23 @@ export class DashboardComponent implements OnDestroy {
         },
         error: (error) => this.error.set(this.errorMessage(error.status))
       });
+
+    this.refreshHeadway();
+  }
+
+  private refreshHeadway(): void {
+    const routeCode = this.selectedRouteCode();
+    if (!routeCode) {
+      this.headway.set(null);
+      return;
+    }
+
+    this.telemetryApi
+      .findRouteHeadway(this.apiBase(), this.username(), this.password(), routeCode)
+      .subscribe({
+        next: (snapshot) => this.headway.set(snapshot),
+        error: () => this.headway.set(null)
+      });
   }
 
   protected toggleAutoRefresh(): void {
@@ -474,6 +509,7 @@ export class DashboardComponent implements OnDestroy {
   protected selectRoute(routeCode: string): void {
     this.selectedRouteCode.set(routeCode);
     this.loadRouteDetail(routeCode);
+    this.refreshHeadway();
   }
 
   private loadRoutes(): void {

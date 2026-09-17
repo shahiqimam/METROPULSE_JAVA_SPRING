@@ -51,6 +51,38 @@ export interface RouteStop {
   longitude: number;
 }
 
+export interface HeadwayPairView {
+  leaderVehicleId: string;
+  followerVehicleId: string;
+  gapMeters: number;
+  headwaySeconds: number | null;
+  ratioToTarget: number | null;
+  classification: 'BUNCHING' | 'EXCESSIVE_GAP' | 'NOMINAL' | 'UNKNOWN';
+}
+
+export interface HeadwayCondition {
+  fingerprint: string;
+  routeCode: string;
+  type: 'BUNCHING' | 'EXCESSIVE_GAP';
+  leaderVehicleId: string;
+  followerVehicleId: string;
+  headwaySeconds: number | null;
+  targetHeadwaySeconds: number;
+  firstObservedAt: string;
+  observedForSeconds: number;
+  confirmed: boolean;
+  ratioToTarget: number;
+}
+
+export interface RouteHeadwaySnapshot {
+  routeCode: string;
+  targetHeadwaySeconds: number;
+  routeLengthMeters: number;
+  vehiclesConsidered: number;
+  pairs: HeadwayPairView[];
+  conditions: HeadwayCondition[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class TelemetryApiService {
   private readonly http = inject(HttpClient);
@@ -87,6 +119,18 @@ export class TelemetryApiService {
     return this.http.get<RouteStop[]>(`${apiBase}/routes/${encodeURIComponent(routeCode)}/stops`, {
       headers: this.authHeaders(username, password)
     });
+  }
+
+  findRouteHeadway(
+    apiBase: string,
+    username: string,
+    password: string,
+    routeCode: string
+  ): Observable<RouteHeadwaySnapshot> {
+    return this.http.get<RouteHeadwaySnapshot>(
+      `${apiBase}/routes/${encodeURIComponent(routeCode)}/headway`,
+      { headers: this.authHeaders(username, password) }
+    );
   }
 
   private authHeaders(username: string, password: string): HttpHeaders {
