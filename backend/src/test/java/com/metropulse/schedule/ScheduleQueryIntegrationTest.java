@@ -26,11 +26,13 @@ class ScheduleQueryIntegrationTest extends PostgisIntegrationTest {
 
     @Test
     void routesReportTheirStopAndTripCounts() {
-        List<RouteSummary> routes = scheduleQueryService.findRoutes();
+        // Assert on the seeded route by code rather than on how many routes exist: other tests import
+        // their own, and a count assertion would make this fail for reasons unrelated to what it tests.
+        RouteSummary route = scheduleQueryService.findRoutes().stream()
+                .filter(summary -> summary.code().equals("M42"))
+                .findFirst()
+                .orElseThrow();
 
-        assertThat(routes).hasSize(1);
-        RouteSummary route = routes.getFirst();
-        assertThat(route.code()).isEqualTo("M42");
         assertThat(route.agencyName()).isEqualTo("MetroPulse Transit Authority");
         assertThat(route.stopCount()).isEqualTo(5);
         assertThat(route.tripCount()).isEqualTo(1);

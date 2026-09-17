@@ -1,0 +1,5 @@
+shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence
+M7-SHP,40.7050,-74.0120,1
+M7-SHP,40.7095,-74.0045,2
+M7-SHP,40.7140,-73.9975,3
+M7-SHP,40.7185,-73.9905,4

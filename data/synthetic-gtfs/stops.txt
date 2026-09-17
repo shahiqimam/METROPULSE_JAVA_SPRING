@@ -1,0 +1,5 @@
+stop_id,stop_name,stop_lat,stop_lon
+M7-001,Harbour Yard,40.7050,-74.0120
+M7-002,"Union Square, North",40.7095,-74.0045
+M7-003,Museum Mile,40.7140,-73.9975
+M7-004,Parkside,40.7185,-73.9905

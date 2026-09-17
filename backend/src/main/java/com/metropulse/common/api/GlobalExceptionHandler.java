@@ -11,6 +11,7 @@ import com.metropulse.ev.domain.VehicleAlreadyChargingException;
 import com.metropulse.incident.domain.InvalidIncidentTransitionException;
 import com.metropulse.incident.domain.UnknownIncidentException;
 import com.metropulse.playback.domain.UnknownPlaybackSessionException;
+import com.metropulse.schedule.importer.ScheduleImportException;
 import com.metropulse.telemetry.domain.InvalidIngestKeyException;
 import com.metropulse.telemetry.domain.UnknownVehicleException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -120,6 +121,19 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return error(HttpStatus.NOT_FOUND, "UNKNOWN_PLAYBACK_SESSION", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ScheduleImportException.class)
+    public ResponseEntity<ApiError> handleScheduleImport(ScheduleImportException ex, HttpServletRequest request) {
+        // Every problem, not just the first: fixing a feed one error per attempt is ten round trips.
+        String requestId = (String) request.getAttribute(RequestIdFilter.REQUEST_ID_ATTRIBUTE);
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(new ApiError(
+                        HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                        "SCHEDULE_IMPORT_REJECTED",
+                        String.join(" | ", ex.problems()),
+                        Instant.now(),
+                        requestId));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
