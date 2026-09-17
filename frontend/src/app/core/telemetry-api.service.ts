@@ -83,6 +83,32 @@ export interface RouteHeadwaySnapshot {
   conditions: HeadwayCondition[];
 }
 
+export type AlertType =
+  | 'TELEMETRY_OFFLINE'
+  | 'ROUTE_DEVIATION'
+  | 'BUNCHING'
+  | 'EXCESSIVE_GAP'
+  | 'LOW_BATTERY'
+  | 'OVER_CAPACITY';
+
+export interface OperationalAlert {
+  id: number;
+  type: AlertType;
+  fingerprint: string;
+  severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  status: 'OPEN' | 'ACKNOWLEDGED' | 'CLOSED';
+  vehicleId: string | null;
+  routeCode: string | null;
+  openedAt: string;
+  lastObservedAt: string;
+  recoveringSince: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  closedAt: string | null;
+  closeReason: 'RECOVERED' | 'CLOSED_BY_CONTROLLER' | null;
+  details: Record<string, unknown>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TelemetryApiService {
   private readonly http = inject(HttpClient);
@@ -131,6 +157,34 @@ export class TelemetryApiService {
       `${apiBase}/routes/${encodeURIComponent(routeCode)}/headway`,
       { headers: this.authHeaders(username, password) }
     );
+  }
+
+  findAlerts(apiBase: string, username: string, password: string): Observable<OperationalAlert[]> {
+    return this.http.get<OperationalAlert[]>(`${apiBase}/alerts`, {
+      headers: this.authHeaders(username, password)
+    });
+  }
+
+  acknowledgeAlert(
+    apiBase: string,
+    username: string,
+    password: string,
+    alertId: number
+  ): Observable<OperationalAlert> {
+    return this.http.post<OperationalAlert>(`${apiBase}/alerts/${alertId}/acknowledge`, {}, {
+      headers: this.authHeaders(username, password)
+    });
+  }
+
+  closeAlert(
+    apiBase: string,
+    username: string,
+    password: string,
+    alertId: number
+  ): Observable<OperationalAlert> {
+    return this.http.post<OperationalAlert>(`${apiBase}/alerts/${alertId}/close`, {}, {
+      headers: this.authHeaders(username, password)
+    });
   }
 
   private authHeaders(username: string, password: string): HttpHeaders {

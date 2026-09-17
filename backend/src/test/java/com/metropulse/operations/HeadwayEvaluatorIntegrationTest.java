@@ -206,6 +206,15 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
     }
 
     @Test
+    void conditionsCanBeReadAcrossEveryRoute() {
+        bunchTwoVehicles();
+        headwayEvaluator.evaluateRoute(route());
+
+        // The unfiltered read is what the alert engine and the conditions endpoint use.
+        assertThat(headwayQueryService.findConditions()).hasSize(1);
+    }
+
+    @Test
     void anUnknownRouteHasNoSnapshot() {
         assertThat(headwayQueryService.findRouteHeadway("NOPE")).isEmpty();
     }

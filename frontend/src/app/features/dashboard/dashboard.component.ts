@@ -4,11 +4,13 @@ import { finalize } from 'rxjs';
 import {
   LatestVehicleTelemetry,
   RouteGeometryPoint,
+  OperationalAlert,
   RouteHeadwaySnapshot,
   RouteStop,
   RouteSummary,
   TelemetryApiService
 } from '../../core/telemetry-api.service';
+import { AlertsPanelComponent } from './components/alerts-panel.component';
 import { FleetPanelComponent } from './components/fleet-panel.component';
 import { HeadwayPanelComponent } from './components/headway-panel.component';
 import { Metric, MetricBarComponent } from './components/metric-bar.component';
@@ -30,6 +32,7 @@ const REFRESH_INTERVAL_MS = 5000;
   selector: 'app-dashboard',
   standalone: true,
   imports: [
+    AlertsPanelComponent,
     CommonModule,
     FleetPanelComponent,
     HeadwayPanelComponent,
@@ -95,6 +98,11 @@ const REFRESH_INTERVAL_MS = 5000;
         />
 
         <div class="sidebar">
+          <app-alerts-panel
+            [alerts]="alerts()"
+            (acknowledged)="acknowledgeAlert($event)"
+            (closed)="closeAlert($event)"
+          />
           <app-headway-panel [snapshot]="headway()" />
           <app-fleet-panel
             [vehicles]="vehicles()"
@@ -322,7 +330,7 @@ const REFRESH_INTERVAL_MS = 5000;
 
     .sidebar {
       display: grid;
-      grid-template-rows: auto minmax(0, 3fr) minmax(0, 2fr);
+      grid-template-rows: auto auto minmax(0, 2fr) minmax(0, 1fr);
       gap: 12px;
       min-height: 0;
     }
@@ -372,6 +380,7 @@ export class DashboardComponent implements OnDestroy {
   protected readonly routeStops = signal<RouteStop[]>([]);
   protected readonly routeGeometry = signal<RouteGeometryPoint[]>([]);
   protected readonly headway = signal<RouteHeadwaySnapshot | null>(null);
+  protected readonly alerts = signal<OperationalAlert[]>([]);
   protected readonly selectedRouteCode = signal<string | null>(null);
   protected readonly selectedVehicleId = signal<string | null>(null);
   protected readonly hoveredVehicleId = signal<string | null>(null);
@@ -420,6 +429,12 @@ export class DashboardComponent implements OnDestroy {
       { label: 'No telemetry', value: String(offline), detail: `${stale} stale`, role: offline > 0 ? 'critical' : null },
       { label: 'Low battery', value: String(lowBattery), detail: 'at or under 20%', role: lowBattery > 0 ? 'serious' : null },
       {
+        label: 'Live alerts',
+        value: String(this.alerts().length),
+        detail: this.unacknowledgedCount() > 0 ? `${this.unacknowledgedCount()} unacknowledged` : 'all acknowledged',
+        role: this.criticalOrMajorCount() > 0 ? 'critical' : null
+      },
+      {
         label: 'Headway',
         value: String(this.sustainedConditions()),
         detail: this.watchedConditions() > 0 ? `${this.watchedConditions()} being watched` : 'pairs out of range',
@@ -429,6 +444,13 @@ export class DashboardComponent implements OnDestroy {
       { label: 'Avg load', value: `${Math.round(this.averageOccupancy())}`, detail: 'passengers on board' }
     ];
   });
+
+  private readonly unacknowledgedCount = computed(
+    () => this.alerts().filter((alert) => alert.status === 'OPEN').length
+  );
+  private readonly criticalOrMajorCount = computed(
+    () => this.alerts().filter((alert) => alert.severity !== 'MINOR').length
+  );
 
   private readonly sustainedConditions = computed(
     () => (this.headway()?.conditions ?? []).filter((condition) => condition.confirmed).length
@@ -470,6 +492,26 @@ export class DashboardComponent implements OnDestroy {
       });
 
     this.refreshHeadway();
+    this.refreshAlerts();
+  }
+
+  protected acknowledgeAlert(alertId: number): void {
+    this.telemetryApi
+      .acknowledgeAlert(this.apiBase(), this.username(), this.password(), alertId)
+      .subscribe({ next: () => this.refreshAlerts(), error: () => this.refreshAlerts() });
+  }
+
+  protected closeAlert(alertId: number): void {
+    this.telemetryApi
+      .closeAlert(this.apiBase(), this.username(), this.password(), alertId)
+      .subscribe({ next: () => this.refreshAlerts(), error: () => this.refreshAlerts() });
+  }
+
+  private refreshAlerts(): void {
+    this.telemetryApi.findAlerts(this.apiBase(), this.username(), this.password()).subscribe({
+      next: (alerts) => this.alerts.set(alerts),
+      error: () => this.alerts.set([])
+    });
   }
 
   private refreshHeadway(): void {

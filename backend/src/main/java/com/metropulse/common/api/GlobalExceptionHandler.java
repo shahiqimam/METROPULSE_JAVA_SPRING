@@ -1,5 +1,7 @@
 package com.metropulse.common.api;
 
+import com.metropulse.alert.domain.AlertAlreadyClosedException;
+import com.metropulse.alert.domain.UnknownAlertException;
 import com.metropulse.telemetry.domain.InvalidIngestKeyException;
 import com.metropulse.telemetry.domain.UnknownVehicleException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,6 +49,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnknownVehicleException.class)
     public ResponseEntity<ApiError> handleUnknownVehicle(UnknownVehicleException ex, HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "UNKNOWN_VEHICLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnknownAlertException.class)
+    public ResponseEntity<ApiError> handleUnknownAlert(UnknownAlertException ex, HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, "UNKNOWN_ALERT", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(AlertAlreadyClosedException.class)
+    public ResponseEntity<ApiError> handleAlertAlreadyClosed(AlertAlreadyClosedException ex, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "ALERT_ALREADY_CLOSED", ex.getMessage(), request);
     }
 
     @ExceptionHandler(IllegalStateException.class)

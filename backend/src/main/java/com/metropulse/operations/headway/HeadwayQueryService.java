@@ -69,7 +69,9 @@ public class HeadwayQueryService {
                 JOIN route r ON r.id = hc.route_id
                 JOIN vehicle leader ON leader.id = hc.leader_vehicle_id
                 JOIN vehicle follower ON follower.id = hc.follower_vehicle_id
-                WHERE (? IS NULL OR r.code = ?)
+                -- Cast both: with a null route filter Postgres has nothing to infer the type from,
+                -- which fails at parse time rather than returning every route.
+                WHERE (CAST(? AS varchar) IS NULL OR r.code = CAST(? AS varchar))
                 ORDER BY hc.confirmed_at NULLS LAST, hc.first_observed_at
                 """,
                 (rs, rowNum) -> {
