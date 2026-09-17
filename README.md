@@ -90,16 +90,17 @@ start without one.
 ## Building and testing
 
 ```bash
-./mvnw test      # unit tests, no infrastructure
-./mvnw verify    # everything; needs PostgreSQL/PostGIS
+./mvnw test                      # backend unit tests, no infrastructure
+./mvnw verify                    # everything; needs PostgreSQL/PostGIS
+npm --prefix frontend run test   # Angular unit tests, headless Chrome
 npm --prefix frontend run build
 ```
 
 `mvnw` downloads Maven itself — only Java 21+ is required.
 
-**238 tests**: threshold and rule logic as unit tests; migrations, PostGIS behaviour, the Kafka
-consumer, charger concurrency, authentication and the WebSocket as integration tests against real
-infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
+**290 tests** — 261 backend and simulator, 29 frontend. Threshold and rule logic as unit tests;
+migrations, PostGIS behaviour, the Kafka consumer, charger concurrency, authentication, schedule
+import and the WebSocket as integration tests against real infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
 projection depends on. See [testing.md](docs/testing.md).
 
 ## Some things worth looking at

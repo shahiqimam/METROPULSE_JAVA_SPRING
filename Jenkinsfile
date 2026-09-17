@@ -106,6 +106,8 @@ pipeline {
       steps {
         dir('frontend') {
           sh 'npm ci'
+          // Headless Chrome, so the agent needs a Chrome or Chromium binary available.
+          sh 'npm run test'
           sh 'npm run build'
         }
       }

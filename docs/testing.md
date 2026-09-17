@@ -3,8 +3,9 @@
 ## Commands
 
 ```bash
-./mvnw test
-./mvnw verify
+./mvnw test                      # backend unit tests
+./mvnw verify                    # everything; needs PostgreSQL/PostGIS
+npm --prefix frontend run test   # Angular unit tests, headless Chrome
 npm --prefix frontend run build
 ```
 
@@ -18,6 +19,8 @@ Maven install is not required. Java 21+ is.
   PostGIS geometry behaviour, `ON CONFLICT` upsert semantics and `jsonb` columns.
 - Broker tests (Spring Kafka's in-process broker): the operational-state listener consuming real
   records, idempotent redelivery, and dead-lettering. These need no Docker.
+- Frontend unit tests (Karma + Jasmine, headless Chrome): the status rules a controller reads, the
+  session service, and the interceptor's single refresh-and-retry on a 401.
 
 H2 is deliberately not used. It cannot prove any of the PostGIS behaviour the projection depends on.
 
@@ -44,10 +47,15 @@ METROPULSE_TEST_DB_PASSWORD=metropulse \
 The database is migrated by Flyway on context start and each test class clears the telemetry tables
 it writes to, so the same database can be reused between runs.
 
+## A note on jasmine versions
+
+The Angular 20 test builder pins to jasmine 5. Installing jasmine 7 makes zone.js fail with
+`Cannot assign to read only property 'describe'` before a single test runs — worth knowing, because
+the error names neither package.
+
 ## Not yet covered
 
 - Outbox publishing under broker failure: the documented scenario where Kafka is down, telemetry
   still commits, the outbox row stays unpublished, and the publisher drains it once Kafka returns.
 - Charger reservation concurrency (pessimistic locking).
 - API-level tests through MockMvc/`@SpringBootTest` web layer.
-- Frontend unit tests.

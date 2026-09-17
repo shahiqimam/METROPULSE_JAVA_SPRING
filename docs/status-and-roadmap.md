@@ -59,7 +59,8 @@ What is built, what is verified, and what is not — kept honest rather than asp
 
 Everything below was run, not assumed.
 
-- `./mvnw clean verify` → BUILD SUCCESS: **217 backend + 21 simulator tests**
+- `./mvnw clean verify` → BUILD SUCCESS: **240 backend + 21 simulator tests**
+- `npm run test` → **29 frontend tests**, headless Chrome
 - Integration tests run the full migration set against real PostgreSQL/PostGIS
 - Kafka consumer, redelivery and dead-lettering exercised against an in-process broker
 - Charger concurrency test fails when `FOR UPDATE` is removed — the check that makes it meaningful
@@ -85,7 +86,8 @@ Everything below was run, not assumed.
   alerts depend on the same work. Analytics reports regularity instead, under its own name.
 - **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
   preview a planner can review before switching over.
-- **Frontend tests.** None. The backend is well covered; the Angular app is not.
+- **Frontend component tests.** The status rules, session service and HTTP interceptor are covered;
+  the components themselves are not rendered in tests.
 - **Redis.** Running in both stacks and used by nothing. It was provisioned for caching and rule
   counters that PostgreSQL has handled adequately so far. Better to say so than to add a decorative
   cache.
@@ -109,6 +111,5 @@ not.
    types.
 2. GTFS import with staged activation.
 3. Playback and analytics screens.
-4. Frontend tests.
-5. Outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on
+4. Outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on
    recovery.
