@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
+import { AuthService, UserRole } from '../../core/auth/auth.service';
 import {
   LatestVehicleTelemetry,
   RouteGeometryPoint,
@@ -16,7 +18,6 @@ import { HeadwayPanelComponent } from './components/headway-panel.component';
 import { Metric, MetricBarComponent } from './components/metric-bar.component';
 import { NetworkMapComponent } from './components/network-map.component';
 import { RoutePanelComponent } from './components/route-panel.component';
-import { SettingsDrawerComponent } from './components/settings-drawer.component';
 import { isLowBattery, isOffRoute } from './vehicle-status';
 
 const REFRESH_INTERVAL_MS = 5000;
@@ -38,8 +39,7 @@ const REFRESH_INTERVAL_MS = 5000;
     HeadwayPanelComponent,
     MetricBarComponent,
     NetworkMapComponent,
-    RoutePanelComponent,
-    SettingsDrawerComponent
+    RoutePanelComponent
   ],
   template: `
     <div class="shell">
@@ -72,15 +72,17 @@ const REFRESH_INTERVAL_MS = 5000;
           <button type="button" class="ghost" (click)="refresh()" [disabled]="loading()">
             {{ loading() ? 'Refreshing…' : 'Refresh' }}
           </button>
-          <button type="button" class="ghost ghost--icon" (click)="settingsOpen.set(true)" aria-label="Connection settings">
-            ⚙
-          </button>
+          <span class="operator" *ngIf="user() as operator">
+            <strong>{{ operator.displayName }}</strong>
+            <small>{{ roleLabel(operator.role) }}</small>
+          </span>
+          <button type="button" class="ghost" (click)="signOut()">Sign out</button>
         </div>
       </header>
 
       <div class="banner" *ngIf="error() as message" role="alert">
         <span>{{ message }}</span>
-        <button type="button" (click)="settingsOpen.set(true)">Connection settings</button>
+        <button type="button" (click)="refresh()">Retry</button>
       </div>
 
       <app-metric-bar [metrics]="metrics()" />
@@ -100,6 +102,7 @@ const REFRESH_INTERVAL_MS = 5000;
         <div class="sidebar">
           <app-alerts-panel
             [alerts]="alerts()"
+            [canAct]="canAct()"
             (acknowledged)="acknowledgeAlert($event)"
             (closed)="closeAlert($event)"
           />
@@ -124,15 +127,6 @@ const REFRESH_INTERVAL_MS = 5000;
       </footer>
     </div>
 
-    <app-settings-drawer
-      [open]="settingsOpen()"
-      [error]="error()"
-      [(apiBase)]="apiBase"
-      [(username)]="username"
-      [(password)]="password"
-      (closed)="settingsOpen.set(false)"
-      (applied)="applySettings()"
-    />
   `,
   styles: [`
     :host {
@@ -259,7 +253,25 @@ const REFRESH_INTERVAL_MS = 5000;
 
     .topbar__actions {
       display: flex;
+      align-items: center;
       gap: 8px;
+    }
+
+    .operator {
+      display: grid;
+      margin-right: 6px;
+      text-align: right;
+    }
+
+    .operator strong {
+      font-size: 13px;
+    }
+
+    .operator small {
+      color: var(--ink-muted);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .ghost {
@@ -370,10 +382,14 @@ const REFRESH_INTERVAL_MS = 5000;
 })
 export class DashboardComponent implements OnDestroy {
   private readonly telemetryApi = inject(TelemetryApiService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
-  protected readonly apiBase = signal(sessionStorage.getItem('metropulse.apiBase') ?? '/api/v1');
-  protected readonly username = signal(sessionStorage.getItem('metropulse.username') ?? 'operator');
-  protected readonly password = signal(sessionStorage.getItem('metropulse.password') ?? 'metropulse-dev-password');
+  protected readonly user = this.auth.user;
+
+  /** Whether to show the controls that act on the network. The backend decides whether they work. */
+  protected readonly canAct = computed(() => this.auth.canAct());
+
 
   protected readonly vehicles = signal<LatestVehicleTelemetry[]>([]);
   protected readonly routes = signal<RouteSummary[]>([]);
@@ -387,7 +403,6 @@ export class DashboardComponent implements OnDestroy {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly lastUpdated = signal<Date | null>(null);
-  protected readonly settingsOpen = signal(false);
   protected readonly autoRefresh = signal(sessionStorage.getItem('metropulse.autoRefresh') !== 'false');
 
   private refreshTimer: number | undefined;
@@ -480,7 +495,7 @@ export class DashboardComponent implements OnDestroy {
     this.loading.set(true);
 
     this.telemetryApi
-      .findLatestVehicleTelemetry(this.apiBase(), this.username(), this.password())
+      .findLatestVehicleTelemetry()
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
         next: (vehicles) => {
@@ -497,18 +512,18 @@ export class DashboardComponent implements OnDestroy {
 
   protected acknowledgeAlert(alertId: number): void {
     this.telemetryApi
-      .acknowledgeAlert(this.apiBase(), this.username(), this.password(), alertId)
+      .acknowledgeAlert(alertId)
       .subscribe({ next: () => this.refreshAlerts(), error: () => this.refreshAlerts() });
   }
 
   protected closeAlert(alertId: number): void {
     this.telemetryApi
-      .closeAlert(this.apiBase(), this.username(), this.password(), alertId)
+      .closeAlert(alertId)
       .subscribe({ next: () => this.refreshAlerts(), error: () => this.refreshAlerts() });
   }
 
   private refreshAlerts(): void {
-    this.telemetryApi.findAlerts(this.apiBase(), this.username(), this.password()).subscribe({
+    this.telemetryApi.findAlerts().subscribe({
       next: (alerts) => this.alerts.set(alerts),
       error: () => this.alerts.set([])
     });
@@ -522,7 +537,7 @@ export class DashboardComponent implements OnDestroy {
     }
 
     this.telemetryApi
-      .findRouteHeadway(this.apiBase(), this.username(), this.password(), routeCode)
+      .findRouteHeadway(routeCode)
       .subscribe({
         next: (snapshot) => this.headway.set(snapshot),
         error: () => this.headway.set(null)
@@ -535,13 +550,13 @@ export class DashboardComponent implements OnDestroy {
     this.configureAutoRefresh();
   }
 
-  protected applySettings(): void {
-    sessionStorage.setItem('metropulse.apiBase', this.apiBase());
-    sessionStorage.setItem('metropulse.username', this.username());
-    sessionStorage.setItem('metropulse.password', this.password());
-    this.settingsOpen.set(false);
-    this.loadRoutes();
-    this.refresh();
+  protected signOut(): void {
+    this.auth.logout();
+    this.router.navigate(['/login']);
+  }
+
+  protected roleLabel(role: UserRole): string {
+    return role.replace(/_/g, ' ').toLowerCase();
   }
 
   protected selectVehicle(vehicleId: string): void {
@@ -555,7 +570,7 @@ export class DashboardComponent implements OnDestroy {
   }
 
   private loadRoutes(): void {
-    this.telemetryApi.findRoutes(this.apiBase(), this.username(), this.password()).subscribe({
+    this.telemetryApi.findRoutes().subscribe({
       next: (routes) => {
         this.routes.set(routes);
         if (routes.length > 0) {
@@ -576,12 +591,12 @@ export class DashboardComponent implements OnDestroy {
   }
 
   private loadRouteDetail(routeCode: string): void {
-    this.telemetryApi.findRouteStops(this.apiBase(), this.username(), this.password(), routeCode).subscribe({
+    this.telemetryApi.findRouteStops(routeCode).subscribe({
       next: (stops) => this.routeStops.set(stops),
       error: () => this.routeStops.set([])
     });
 
-    this.telemetryApi.findRouteGeometry(this.apiBase(), this.username(), this.password(), routeCode).subscribe({
+    this.telemetryApi.findRouteGeometry(routeCode).subscribe({
       next: (geometry) => this.routeGeometry.set(geometry),
       error: () => this.routeGeometry.set([])
     });

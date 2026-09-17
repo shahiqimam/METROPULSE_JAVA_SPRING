@@ -28,6 +28,12 @@ spring:
 metropulse:
   telemetry:
     ingest-key: ${METROPULSE_INGEST_KEY:dev-ingest-key}
+  auth:
+    # Development default only. The production-style stack must supply its own.
+    jwt-secret: ${METROPULSE_JWT_SECRET:metropulse-development-signing-secret-change-me}
+    access-token-minutes: ${METROPULSE_ACCESS_TOKEN_MINUTES:15}
+    refresh-token-days: ${METROPULSE_REFRESH_TOKEN_DAYS:7}
+    allowed-origins: ${METROPULSE_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:8080}
   operations:
     consumer-enabled: ${METROPULSE_OPERATIONS_CONSUMER_ENABLED:true}
     consumer-group: ${METROPULSE_OPERATIONS_CONSUMER_GROUP:metropulse-operational-state}

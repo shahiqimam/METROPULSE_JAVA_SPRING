@@ -1,6 +1,8 @@
 package com.metropulse.common.api;
 
 import com.metropulse.alert.domain.AlertAlreadyClosedException;
+import com.metropulse.auth.domain.InvalidCredentialsException;
+import com.metropulse.auth.domain.InvalidRefreshTokenException;
 import com.metropulse.alert.domain.UnknownAlertException;
 import com.metropulse.ev.domain.ChargerNotAvailableException;
 import com.metropulse.ev.domain.UnknownChargerException;
@@ -56,6 +58,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnknownVehicleException.class)
     public ResponseEntity<ApiError> handleUnknownVehicle(UnknownVehicleException ex, HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "UNKNOWN_VEHICLE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ApiError> handleInvalidCredentials(InvalidCredentialsException ex, HttpServletRequest request) {
+        // One message for every cause: naming which half was wrong helps only an attacker.
+        return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ApiError> handleInvalidRefreshToken(InvalidRefreshTokenException ex, HttpServletRequest request) {
+        return error(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", "Refresh token is not valid.", request);
     }
 
     @ExceptionHandler(UnknownAlertException.class)

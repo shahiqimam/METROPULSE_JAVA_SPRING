@@ -35,7 +35,8 @@ import static org.awaitility.Awaitility.await;
  */
 @SpringBootTest(properties = {
         "metropulse.outbox.enabled=false",
-        "metropulse.operations.consumer-enabled=true"
+        "metropulse.operations.consumer-enabled=true",
+        "metropulse.scheduling-enabled=false"
 })
 @EmbeddedKafka(
         partitions = 3,

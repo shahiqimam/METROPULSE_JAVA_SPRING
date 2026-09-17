@@ -62,7 +62,7 @@ const ALERT_LABELS: Record<string, string> = {
               </ng-container>
               {{ age(alert) }}
             </span>
-            <span class="alert__actions">
+            <span class="alert__actions" *ngIf="canAct()">
               <button
                 type="button"
                 *ngIf="alert.status === 'OPEN'"
@@ -218,6 +218,14 @@ const ALERT_LABELS: Record<string, string> = {
 })
 export class AlertsPanelComponent {
   readonly alerts = input<OperationalAlert[]>([]);
+
+  /**
+   * Whether to show the action buttons.
+   *
+   * <p>Presentation only. A viewer who forges a click still gets a 403, because authorisation lives
+   * in the backend and hiding a button is not a security control.
+   */
+  readonly canAct = input(false);
 
   readonly acknowledged = output<number>();
   readonly closed = output<number>();

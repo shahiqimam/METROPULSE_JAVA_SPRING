@@ -26,7 +26,10 @@ import org.testcontainers.utility.DockerImageName;
         // These tests assert on stored rows and drive the event handler directly, so no broker is
         // involved. A subclass that wants the real listener declares its own @SpringBootTest.
         "metropulse.outbox.enabled=false",
-        "metropulse.operations.consumer-enabled=false"
+        "metropulse.operations.consumer-enabled=false",
+        // Tests drive the evaluators one call at a time; a scheduler doing the same work in the
+        // background would change state underneath the assertions.
+        "metropulse.scheduling-enabled=false"
 })
 @Import(MutableClock.Config.class)
 public abstract class PostgisIntegrationTest {

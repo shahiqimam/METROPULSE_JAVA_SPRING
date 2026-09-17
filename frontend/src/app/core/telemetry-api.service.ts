@@ -1,4 +1,4 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
@@ -113,87 +113,49 @@ export interface OperationalAlert {
 export class TelemetryApiService {
   private readonly http = inject(HttpClient);
 
-  findLatestVehicleTelemetry(
-    apiBase: string,
-    username: string,
-    password: string
-  ): Observable<LatestVehicleTelemetry[]> {
-    return this.http.get<LatestVehicleTelemetry[]>(`${apiBase}/telemetry/vehicles/latest`, {
-      headers: this.authHeaders(username, password)
-    });
+  /** Requests are authorised by the interceptor, so callers never handle credentials. */
+  private readonly apiBase = '/api/v1';
+
+  findLatestVehicleTelemetry(): Observable<LatestVehicleTelemetry[]> {
+    return this.http.get<LatestVehicleTelemetry[]>(`${this.apiBase}/telemetry/vehicles/latest`, {});
   }
 
-  findRoutes(apiBase: string, username: string, password: string): Observable<RouteSummary[]> {
-    return this.http.get<RouteSummary[]>(`${apiBase}/routes`, {
-      headers: this.authHeaders(username, password)
-    });
+  findRoutes(): Observable<RouteSummary[]> {
+    return this.http.get<RouteSummary[]>(`${this.apiBase}/routes`, {});
   }
 
-  findRouteGeometry(
-    apiBase: string,
-    username: string,
-    password: string,
-    routeCode: string
+  findRouteGeometry(routeCode: string
   ): Observable<RouteGeometryPoint[]> {
     return this.http.get<RouteGeometryPoint[]>(
-      `${apiBase}/routes/${encodeURIComponent(routeCode)}/geometry`,
-      { headers: this.authHeaders(username, password) }
+      `${this.apiBase}/routes/${encodeURIComponent(routeCode)}/geometry`,
+      {}
     );
   }
 
-  findRouteStops(apiBase: string, username: string, password: string, routeCode: string): Observable<RouteStop[]> {
-    return this.http.get<RouteStop[]>(`${apiBase}/routes/${encodeURIComponent(routeCode)}/stops`, {
-      headers: this.authHeaders(username, password)
-    });
+  findRouteStops(routeCode: string): Observable<RouteStop[]> {
+    return this.http.get<RouteStop[]>(`${this.apiBase}/routes/${encodeURIComponent(routeCode)}/stops`, {});
   }
 
-  findRouteHeadway(
-    apiBase: string,
-    username: string,
-    password: string,
-    routeCode: string
+  findRouteHeadway(routeCode: string
   ): Observable<RouteHeadwaySnapshot> {
     return this.http.get<RouteHeadwaySnapshot>(
-      `${apiBase}/routes/${encodeURIComponent(routeCode)}/headway`,
-      { headers: this.authHeaders(username, password) }
+      `${this.apiBase}/routes/${encodeURIComponent(routeCode)}/headway`,
+      {}
     );
   }
 
-  findAlerts(apiBase: string, username: string, password: string): Observable<OperationalAlert[]> {
-    return this.http.get<OperationalAlert[]>(`${apiBase}/alerts`, {
-      headers: this.authHeaders(username, password)
-    });
+  findAlerts(): Observable<OperationalAlert[]> {
+    return this.http.get<OperationalAlert[]>(`${this.apiBase}/alerts`, {});
   }
 
-  acknowledgeAlert(
-    apiBase: string,
-    username: string,
-    password: string,
-    alertId: number
+  acknowledgeAlert(alertId: number
   ): Observable<OperationalAlert> {
-    return this.http.post<OperationalAlert>(`${apiBase}/alerts/${alertId}/acknowledge`, {}, {
-      headers: this.authHeaders(username, password)
-    });
+    return this.http.post<OperationalAlert>(`${this.apiBase}/alerts/${alertId}/acknowledge`, {}, {});
   }
 
-  closeAlert(
-    apiBase: string,
-    username: string,
-    password: string,
-    alertId: number
+  closeAlert(alertId: number
   ): Observable<OperationalAlert> {
-    return this.http.post<OperationalAlert>(`${apiBase}/alerts/${alertId}/close`, {}, {
-      headers: this.authHeaders(username, password)
-    });
+    return this.http.post<OperationalAlert>(`${this.apiBase}/alerts/${alertId}/close`, {}, {});
   }
 
-  private authHeaders(username: string, password: string): HttpHeaders {
-    if (!username || !password) {
-      return new HttpHeaders();
-    }
-
-    return new HttpHeaders({
-      Authorization: `Basic ${btoa(`${username}:${password}`)}`
-    });
-  }
 }

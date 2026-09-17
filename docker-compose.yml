@@ -9,8 +9,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: metropulse
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       METROPULSE_INGEST_KEY: dev-ingest-key
-      SPRING_SECURITY_USER_NAME: ${METROPULSE_OPERATOR_USERNAME:-operator}
-      SPRING_SECURITY_USER_PASSWORD: ${METROPULSE_OPERATOR_PASSWORD:-metropulse-dev-password}
+      METROPULSE_JWT_SECRET: ${METROPULSE_JWT_SECRET:-metropulse-development-signing-secret-change-me}
+      METROPULSE_ALLOWED_ORIGINS: ${METROPULSE_ALLOWED_ORIGINS:-http://localhost:4200}
     ports:
       - "18080:8080"
     depends_on:
