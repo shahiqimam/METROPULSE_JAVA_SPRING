@@ -22,7 +22,14 @@ Implemented:
 - transactional telemetry insert plus outbox event insert
 - scheduled outbox publisher to Kafka topic `metropulse.telemetry.v1`
 - standard API error handling with request IDs
-- latest vehicle telemetry read endpoint at `GET /api/v1/telemetry/vehicles/latest`
+- current vehicle state table (`vehicle_current_state`) projected inside the ingest transaction
+- no-rewind rule so late events are stored historically without moving current state backwards
+- PostGIS route progress (`ST_LineLocatePoint`) and route deviation in meters (`ST_Distance` on geography)
+- vehicle-to-route assignment (`vehicle.assigned_route_id`) seeded for the development fleet
+- telemetry-age connectivity classification (ONLINE/STALE/OFFLINE)
+- current vehicle state read endpoint at `GET /api/v1/telemetry/vehicles/latest`
+- Maven Wrapper so the build runs without a host Maven install
+- JUnit 5 unit tests and PostgreSQL/PostGIS integration tests
 - Docker Compose development credentials for authenticated read APIs
 - static route and route-stop read endpoints at `GET /api/v1/routes` and `GET /api/v1/routes/{code}/stops`
 
@@ -31,10 +38,11 @@ Not yet implemented:
 - JWT authentication and refresh tokens
 - role-based authorization
 - GTFS-style schedule importer
-- operational state projection
+- operational state behind the Kafka consumer rather than inside the ingest transaction
+- schedule deviation, headway, bunching
 - alerts, incidents, EV charging, playback, analytics
 - WebSocket realtime updates
-- backend unit and integration test coverage beyond the placeholder test
+- Kafka consumer, MockMvc API, and charger concurrency test coverage
 
 ### Simulator
 
@@ -63,6 +71,8 @@ Implemented:
 - Docker and Angular dev proxy support for `/api`
 - auto-refresh toggle with 10-second polling
 - vehicle summary cards, fleet summary metrics, scheduled route summary, and route stop pattern
+- per-vehicle connectivity pill, route progress bar, and route deviation readout
+- fleet counters for offline and off-route vehicles
 - extracted telemetry API service
 
 Not yet implemented:
@@ -118,10 +128,16 @@ Verified successfully:
 - outbox publisher drains unpublished rows to Kafka; 604 existing rows were marked published with no errors
 - Kafka topic `metropulse.telemetry.v1` is created with 3 partitions and contains telemetry envelope messages
 - simulator can emit four seeded development vehicles per tick with scenario-specific speed, dwell, occupancy, and battery patterns
+- Maven Wrapper bootstraps Maven 3.9.9 and `./mvnw test` passes: 24 backend tests and 1 simulator test
+- integration tests run the full Flyway migration set (through V7) against real PostgreSQL/PostGIS
+- route progress is 0.0 at the seeded M42 start point, 1.0 at its end point, and in between elsewhere
+- off-route positions report deviation in meters, and unassigned vehicles report null rather than a fabricated 0.0
+- live Docker stack returns route code, progress, deviation, telemetry age, and connectivity for all four simulated vehicles
 
-Current limitation:
+Current limitations:
 
-- Maven is not installed on the host; Java verification has been done through Docker images when Docker is available.
+- Testcontainers cannot start containers on this host: docker-java fails API negotiation against Docker Engine 29 with HTTP 400, although the Docker CLI works. Integration tests were therefore run against the Compose stack's real PostGIS database through `METROPULSE_TEST_DB_URL`. The Testcontainers path remains the default and is what CI should exercise.
+- The simulator's synthetic movement path predates the seeded route geometry, so simulated vehicles sit up to roughly 260 m from the M42 shape. The deviation numbers are real; the simulator path should be generated from route geometry in a later slice.
 
 ## Recommended Phase Plan
 
@@ -131,9 +147,6 @@ Status: mostly complete.
 
 Remaining:
 
-- add Maven wrapper so host Maven is not required
-- add meaningful backend smoke/unit tests
-- verify `.dockerignore` with Docker once Docker Desktop is back
 - tighten README clone-to-run instructions
 
 Estimated effort: 0.5-1 day.
@@ -279,8 +292,8 @@ The best working pattern is to keep shipping small vertical slices: schema, API,
 
 ## Next Best Slices
 
-1. Add Maven wrapper and backend test scaffolding.
-2. Add authentication with stable seeded operator users and JWT.
-3. Add static schedule schema and a small fictional route/stop seed.
-4. Add publisher retry/backoff tuning and tests around failed Kafka sends.
-5. Add operational projections from Kafka events.
+1. Drive the simulator along the seeded route geometry so deviation is a scenario input, not an artefact.
+2. Move the projection behind a Kafka consumer with an idempotent processed-event table and a DLT.
+3. Add schedule deviation against `stop_time`, then headway and bunching rules.
+4. Add authentication with stable seeded operator users and JWT.
+5. Add publisher retry/backoff tuning and tests around failed Kafka sends.

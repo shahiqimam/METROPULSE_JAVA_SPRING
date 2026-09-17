@@ -6,8 +6,10 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 ## Implemented Foundation
 
-- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, latest-vehicle telemetry read API, and static schedule read API
-- Angular operations dashboard that reads live telemetry and scheduled route data through the backend API
+- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, current vehicle state projection, and static schedule read API
+- Operational state projection: PostGIS route progress and route deviation in meters, telemetry-age connectivity, and a no-rewind rule for late events
+- Angular operations dashboard that reads live vehicle state and scheduled route data through the backend API
+- JUnit 5 unit tests plus PostgreSQL/PostGIS integration tests run through the Maven Wrapper
 - Java simulator that emits deterministic multi-vehicle scenario telemetry into the backend on a schedule
 - PostgreSQL/PostGIS, Kafka, Redis, backend, frontend, and simulator wired with Docker Compose
 - Development nginx proxy for containerized frontend `/api` calls
@@ -15,6 +17,8 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 ## Planned Features
 
+- Operational state behind the Kafka consumer rather than inside the ingest transaction
+- Schedule deviation, headway, and bunching
 - Operator authentication and role-based authorization
 - WebSocket/STOMP realtime dashboard deltas
 - Fleet, route, stop, trip, incident, and charging workflows
@@ -36,17 +40,19 @@ data/          Synthetic schedule/GTFS-style inputs
 
 ## Local Prerequisites
 
-- Java 21+
-- Maven 3.9+ or Docker for Maven-based image builds
+- Java 21+ (the Maven Wrapper supplies Maven itself)
 - Node.js 22+
 - Docker Desktop
 
 ## Development Commands
 
 ```bash
+./mvnw test
 npm --prefix frontend run build
 docker compose up --build
 ```
+
+Integration tests need a PostgreSQL/PostGIS database; see [docs/testing.md](docs/testing.md).
 
 The Docker development stack exposes:
 
@@ -63,6 +69,9 @@ password: metropulse-dev-password
 ```
 
 Override them with `METROPULSE_OPERATOR_USERNAME` and `METROPULSE_OPERATOR_PASSWORD` in a local `.env` file.
+
+Vehicle state, including route progress and route deviation, is documented in
+[docs/operational-state.md](docs/operational-state.md).
 
 The simulator posts multi-vehicle scenario telemetry to `POST /api/v1/telemetry/ingest` with the development ingest key and the dashboard reads latest vehicle positions from `GET /api/v1/telemetry/vehicles/latest`. Override the active scenario with `METROPULSE_SIMULATOR_SCENARIO`, for example `BUNCHING`, `LONG_DWELL`, or `EV_LOW_BATTERY`.
 

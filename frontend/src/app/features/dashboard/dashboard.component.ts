@@ -43,6 +43,14 @@ import { LatestVehicleTelemetry, RouteStop, RouteSummary, TelemetryApiService } 
           <strong>{{ averageOccupancy() | number:'1.0-0' }}</strong>
         </div>
         <div>
+          <span>Offline vehicles</span>
+          <strong>{{ offlineVehicles() }}</strong>
+        </div>
+        <div>
+          <span>Off route</span>
+          <strong>{{ offRouteVehicles() }}</strong>
+        </div>
+        <div>
           <span>Last update</span>
           <strong>{{ lastUpdatedLabel() }}</strong>
         </div>
@@ -143,7 +151,12 @@ import { LatestVehicleTelemetry, RouteStop, RouteSummary, TelemetryApiService } 
                   <h3>{{ vehicle.vehicleId }}</h3>
                   <p>{{ vehicle.vehicleType }} · {{ vehicle.propulsionType }}</p>
                 </div>
-                <span class="status-pill">{{ vehicle.status }}</span>
+                <div class="pill-stack">
+                  <span class="status-pill">{{ vehicle.status }}</span>
+                  <span class="link-pill" [ngClass]="'link-pill--' + vehicle.connectivityState.toLowerCase()">
+                    {{ vehicle.connectivityState }} · {{ vehicle.telemetryAgeSeconds | number:'1.0-0' }}s
+                  </span>
+                </div>
               </div>
 
               <dl class="metric-grid">
@@ -164,6 +177,23 @@ import { LatestVehicleTelemetry, RouteStop, RouteSummary, TelemetryApiService } 
                   <dd>{{ vehicle.headingDegrees | number:'1.0-0' }} deg</dd>
                 </div>
               </dl>
+
+              <div class="route-progress" *ngIf="vehicle.routeCode as routeCode">
+                <div class="route-progress__head">
+                  <span>Route {{ routeCode }}</span>
+                  <span>{{ (vehicle.routeProgress ?? 0) * 100 | number:'1.0-0' }}% along shape</span>
+                </div>
+                <div class="route-progress__track" role="presentation">
+                  <div class="route-progress__fill" [style.width.%]="(vehicle.routeProgress ?? 0) * 100"></div>
+                </div>
+                <small [class.route-progress__deviation--high]="isOffRoute(vehicle)">
+                  {{ vehicle.routeDeviationMeters | number:'1.0-0' }} m from route shape
+                </small>
+              </div>
+
+              <div class="route-progress route-progress--empty" *ngIf="!vehicle.routeCode">
+                <small>No route assignment; route progress is not projected.</small>
+              </div>
 
               <div class="position-row">
                 <span>{{ vehicle.latitude | number:'1.4-4' }}</span>
@@ -279,7 +309,7 @@ import { LatestVehicleTelemetry, RouteStop, RouteSummary, TelemetryApiService } 
 
     .status-band {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       border-top: 1px solid #233242;
       border-bottom: 1px solid #233242;
       background: #14202b;
@@ -489,6 +519,78 @@ import { LatestVehicleTelemetry, RouteStop, RouteSummary, TelemetryApiService } 
       font-size: 12px;
     }
 
+    .pill-stack {
+      display: grid;
+      gap: 6px;
+      justify-items: end;
+    }
+
+    .link-pill {
+      border: 1px solid #304457;
+      border-radius: 999px;
+      color: #cfe1e8;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+
+    .link-pill--online {
+      border-color: #4cb9a8;
+      color: #91eadf;
+    }
+
+    .link-pill--stale {
+      border-color: #d1a54a;
+      color: #ffd894;
+    }
+
+    .link-pill--offline {
+      border-color: #c96a5e;
+      color: #ffb3a9;
+    }
+
+    .route-progress {
+      margin-top: 16px;
+      display: grid;
+      gap: 7px;
+    }
+
+    .route-progress--empty {
+      min-height: 44px;
+      align-content: center;
+    }
+
+    .route-progress__head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: #9eb0bd;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .route-progress__track {
+      height: 6px;
+      border-radius: 999px;
+      background: #233242;
+      overflow: hidden;
+    }
+
+    .route-progress__fill {
+      height: 100%;
+      background: #3fc4b4;
+    }
+
+    .route-progress small {
+      color: #9eb0bd;
+      font-size: 12px;
+    }
+
+    .route-progress__deviation--high {
+      color: #ffb3a9;
+    }
+
     .vehicle-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -621,8 +723,17 @@ export class DashboardComponent implements OnDestroy {
 
   private refreshTimer: number | undefined;
 
+  /** Project threshold: more than 100 m from the assigned route shape is treated as off route. */
+  protected static readonly ROUTE_DEVIATION_METERS = 100;
+
   protected readonly averageSpeed = computed(() => this.average((vehicle) => vehicle.speedKph));
   protected readonly averageOccupancy = computed(() => this.average((vehicle) => vehicle.occupancyEstimate));
+  protected readonly offlineVehicles = computed(
+    () => this.vehicles().filter((vehicle) => vehicle.connectivityState === 'OFFLINE').length
+  );
+  protected readonly offRouteVehicles = computed(
+    () => this.vehicles().filter((vehicle) => this.isOffRoute(vehicle)).length
+  );
   protected readonly lastUpdatedLabel = computed(() => {
     const value = this.lastUpdated();
     return value ? value.toLocaleTimeString() : 'Waiting';
@@ -671,6 +782,13 @@ export class DashboardComponent implements OnDestroy {
         this.error.set(this.errorMessage(error.status));
       }
     });
+  }
+
+  protected isOffRoute(vehicle: LatestVehicleTelemetry): boolean {
+    return (
+      vehicle.routeDeviationMeters !== null &&
+      vehicle.routeDeviationMeters > DashboardComponent.ROUTE_DEVIATION_METERS
+    );
   }
 
   protected trackVehicle(_index: number, vehicle: LatestVehicleTelemetry): string {

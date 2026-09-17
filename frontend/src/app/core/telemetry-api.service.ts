@@ -17,6 +17,11 @@ export interface LatestVehicleTelemetry {
   headingDegrees: number;
   occupancyEstimate: number;
   batteryPercent: number | null;
+  routeCode: string | null;
+  routeProgress: number | null;
+  routeDeviationMeters: number | null;
+  telemetryAgeSeconds: number;
+  connectivityState: 'ONLINE' | 'STALE' | 'OFFLINE';
 }
 
 export interface RouteSummary {

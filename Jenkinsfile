@@ -10,7 +10,7 @@ pipeline {
 
     stage('Backend and Simulator Verify') {
       steps {
-        sh 'mvn clean verify'
+        sh './mvnw -B clean verify'
       }
     }
 
