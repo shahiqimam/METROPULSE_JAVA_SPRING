@@ -8,6 +8,7 @@ import com.metropulse.ev.domain.UnknownChargingSessionException;
 import com.metropulse.ev.domain.VehicleAlreadyChargingException;
 import com.metropulse.incident.domain.InvalidIncidentTransitionException;
 import com.metropulse.incident.domain.UnknownIncidentException;
+import com.metropulse.playback.domain.UnknownPlaybackSessionException;
 import com.metropulse.telemetry.domain.InvalidIngestKeyException;
 import com.metropulse.telemetry.domain.UnknownVehicleException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -98,6 +99,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnknownChargingSessionException.class)
     public ResponseEntity<ApiError> handleUnknownChargingSession(UnknownChargingSessionException ex, HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "UNKNOWN_CHARGING_SESSION", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnknownPlaybackSessionException.class)
+    public ResponseEntity<ApiError> handleUnknownPlaybackSession(
+            UnknownPlaybackSessionException ex,
+            HttpServletRequest request
+    ) {
+        return error(HttpStatus.NOT_FOUND, "UNKNOWN_PLAYBACK_SESSION", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", ex.getMessage(), request);
     }
 
     @ExceptionHandler(IllegalStateException.class)
