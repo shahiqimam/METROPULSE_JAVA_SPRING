@@ -3,6 +3,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService, UserRole } from '../../core/auth/auth.service';
+import { RealtimeService } from '../../core/realtime/realtime.service';
 import {
   LatestVehicleTelemetry,
   RouteGeometryPoint,
@@ -55,6 +56,9 @@ const REFRESH_INTERVAL_MS = 5000;
         <div class="topbar__status">
           <span class="live" [attr.data-state]="connectionState()">
             <span class="live__dot"></span>{{ connectionLabel() }}
+          </span>
+          <span class="channel" [attr.data-state]="realtimeState()">
+            {{ realtimeState() === 'live' ? 'Streaming' : 'Polling' }}
           </span>
           <span class="clock">{{ lastUpdatedLabel() }}</span>
         </div>
@@ -244,6 +248,22 @@ const REFRESH_INTERVAL_MS = 5000;
       .live[data-state='live'] .live__dot { animation: none; }
     }
 
+    .channel {
+      padding: 3px 8px;
+      border: 1px solid var(--hairline-strong);
+      border-radius: 999px;
+      color: var(--ink-muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .channel[data-state='live'] {
+      border-color: color-mix(in srgb, var(--series-1) 55%, transparent);
+      color: var(--series-1);
+    }
+
     .clock {
       color: var(--ink-muted);
       font-family: var(--font-mono);
@@ -383,9 +403,11 @@ const REFRESH_INTERVAL_MS = 5000;
 export class DashboardComponent implements OnDestroy {
   private readonly telemetryApi = inject(TelemetryApiService);
   private readonly auth = inject(AuthService);
+  private readonly realtime = inject(RealtimeService);
   private readonly router = inject(Router);
 
   protected readonly user = this.auth.user;
+  protected readonly realtimeState = this.realtime.state;
 
   /** Whether to show the controls that act on the network. The backend decides whether they work. */
   protected readonly canAct = computed(() => this.auth.canAct());
@@ -481,10 +503,38 @@ export class DashboardComponent implements OnDestroy {
     this.loadRoutes();
     this.refresh();
     this.configureAutoRefresh();
+    this.configureRealtime();
+  }
+
+  /**
+   * Subscribes to updates, keeping polling as the fallback.
+   *
+   * <p>The socket makes the dashboard prompt; polling makes it correct. If the socket never connects
+   * the screen still updates, just every few seconds instead of immediately.
+   */
+  private configureRealtime(): void {
+    this.realtime.subscribe('/topic/vehicles', (payload) =>
+      this.vehicles.set(payload as LatestVehicleTelemetry[])
+    );
+    this.realtime.subscribe('/topic/alerts', (payload) =>
+      this.alerts.set(payload as OperationalAlert[])
+    );
+    // Headway conditions arrive as deltas, but the panel needs the whole snapshot, so a condition
+    // change triggers a refetch rather than a partial update.
+    this.realtime.subscribe('/topic/headway', () => this.refreshHeadway());
+
+    // Anything could have happened while the socket was down, so start again from the baseline.
+    this.realtime.onReconnect(() => {
+      this.refresh();
+      this.loadRoutes();
+    });
+
+    this.realtime.connect();
   }
 
   ngOnDestroy(): void {
     this.clearAutoRefresh();
+    this.realtime.disconnect();
   }
 
   protected refresh(): void {
@@ -551,6 +601,7 @@ export class DashboardComponent implements OnDestroy {
   }
 
   protected signOut(): void {
+    this.realtime.disconnect();
     this.auth.logout();
     this.router.navigate(['/login']);
   }

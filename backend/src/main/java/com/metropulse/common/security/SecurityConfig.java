@@ -88,6 +88,12 @@ public class SecurityConfig {
                         // Machine-to-machine, guarded by the ingest key rather than by a token.
                         .requestMatchers(HttpMethod.POST, "/api/v1/telemetry/ingest").permitAll()
 
+                        // A browser cannot set an Authorization header on a WebSocket handshake, so
+                        // the token arrives in the STOMP CONNECT frame and is checked by
+                        // WebSocketAuthenticationInterceptor. Letting the handshake through is not
+                        // the same as letting the connection through.
+                        .requestMatchers("/ws/**").permitAll()
+
                         // Acting on the network.
                         .requestMatchers(HttpMethod.POST, "/api/v1/alerts/**").hasAnyRole(CONTROLLER, ADMIN)
                         .requestMatchers(HttpMethod.POST, "/api/v1/incidents/**").hasAnyRole(CONTROLLER, ADMIN)

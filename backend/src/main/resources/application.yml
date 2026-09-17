@@ -37,6 +37,8 @@ metropulse:
   operations:
     consumer-enabled: ${METROPULSE_OPERATIONS_CONSUMER_ENABLED:true}
     consumer-group: ${METROPULSE_OPERATIONS_CONSUMER_GROUP:metropulse-operational-state}
+  realtime:
+    broadcast-delay-ms: ${METROPULSE_REALTIME_BROADCAST_DELAY_MS:2000}
   outbox:
     enabled: ${METROPULSE_OUTBOX_ENABLED:true}
     topic: ${METROPULSE_OUTBOX_TOPIC:metropulse.telemetry.v1}
