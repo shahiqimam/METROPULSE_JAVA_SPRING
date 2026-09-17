@@ -6,8 +6,8 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 
 ## Implemented Foundation
 
-- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, and latest-vehicle telemetry read API
-- Angular operations dashboard that reads live telemetry through `/api/v1/telemetry/vehicles/latest`
+- Spring Boot backend with health checks, Flyway migrations, telemetry ingest, duplicate protection, transactional outbox writes, Kafka outbox publishing, latest-vehicle telemetry read API, and static schedule read API
+- Angular operations dashboard that reads live telemetry and scheduled route data through the backend API
 - Java simulator that emits deterministic synthetic vehicle telemetry into the backend on a schedule
 - PostgreSQL/PostGIS, Kafka, Redis, backend, frontend, and simulator wired with Docker Compose
 - Development nginx proxy for containerized frontend `/api` calls
@@ -18,7 +18,7 @@ It models a fictional bus/BRT network with schedule data, live vehicle telemetry
 - Operator authentication and role-based authorization
 - WebSocket/STOMP realtime dashboard deltas
 - Fleet, route, stop, trip, incident, and charging workflows
-- Kafka outbox publisher and event consumers
+- Kafka event consumers
 - Historical playback and analytics views
 - Broader JUnit, Mockito, Testcontainers, and frontend test coverage
 - Production deployment hardening and CI/CD expansion

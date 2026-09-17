@@ -12,7 +12,7 @@ Implemented:
 
 - Spring Boot backend module
 - health endpoint at `GET /api/v1/health`
-- Flyway migrations for the foundation schema and development vehicle seed
+- Flyway migrations for the foundation schema, development vehicle seed, static schedule schema, and schedule seed
 - PostgreSQL/PostGIS schema for users, vehicles, telemetry, and outbox events
 - telemetry ingest endpoint at `POST /api/v1/telemetry/ingest`
 - ingest key validation through `X-Ingest-Key`
@@ -20,16 +20,17 @@ Implemented:
 - duplicate telemetry handling by `source_event_id`
 - known-vehicle validation
 - transactional telemetry insert plus outbox event insert
+- scheduled outbox publisher to Kafka topic `metropulse.telemetry.v1`
 - standard API error handling with request IDs
 - latest vehicle telemetry read endpoint at `GET /api/v1/telemetry/vehicles/latest`
 - Docker Compose development credentials for authenticated read APIs
+- static route and route-stop read endpoints at `GET /api/v1/routes` and `GET /api/v1/routes/{code}/stops`
 
 Not yet implemented:
 
 - JWT authentication and refresh tokens
 - role-based authorization
-- static schedule model and importer
-- outbox publisher to Kafka
+- GTFS-style schedule importer
 - operational state projection
 - alerts, incidents, EV charging, playback, analytics
 - WebSocket realtime updates
@@ -61,7 +62,7 @@ Implemented:
 - configurable API base and Basic Auth credentials
 - Docker and Angular dev proxy support for `/api`
 - auto-refresh toggle with 10-second polling
-- vehicle summary cards and fleet summary metrics
+- vehicle summary cards, fleet summary metrics, scheduled route summary, and route stop pattern
 - extracted telemetry API service
 
 Not yet implemented:
@@ -89,7 +90,7 @@ Not yet implemented:
 
 - production-style Compose/nginx stack where only nginx is public
 - complete Jenkins pipeline stages with passing tests
-- full topic creation/configuration
+- production topic configuration beyond the local telemetry topic
 - deployment docs and smoke-test automation
 
 ## Verified So Far
@@ -113,6 +114,9 @@ Verified successfully:
 - static schedule migrations apply through Flyway to schema version 4
 - development schedule seed creates 1 agency, 1 route, 5 stops, 1 trip, and 5 stop times
 - seeded route `M42` stores a 5-point PostGIS route geometry
+- schedule read APIs return route summary and ordered stop pattern data with authentication
+- outbox publisher drains unpublished rows to Kafka; 604 existing rows were marked published with no errors
+- Kafka topic `metropulse.telemetry.v1` is created with 3 partitions and contains telemetry envelope messages
 
 Current limitation:
 
@@ -278,4 +282,4 @@ The best working pattern is to keep shipping small vertical slices: schema, API,
 2. Add authentication with stable seeded operator users and JWT.
 3. Add static schedule schema and a small fictional route/stop seed.
 4. Expand simulator from one vehicle to multiple scenario-capable vehicles.
-5. Implement outbox publisher to Kafka and verify unpublished retry behavior.
+5. Add publisher retry/backoff tuning and tests around failed Kafka sends.

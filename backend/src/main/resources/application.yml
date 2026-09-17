@@ -16,10 +16,18 @@ spring:
         format_sql: true
   kafka:
     bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 metropulse:
   telemetry:
     ingest-key: ${METROPULSE_INGEST_KEY:dev-ingest-key}
+  outbox:
+    enabled: ${METROPULSE_OUTBOX_ENABLED:true}
+    topic: ${METROPULSE_OUTBOX_TOPIC:metropulse.telemetry.v1}
+    batch-size: ${METROPULSE_OUTBOX_BATCH_SIZE:25}
+    publish-delay-ms: ${METROPULSE_OUTBOX_PUBLISH_DELAY_MS:5000}
 
 management:
   endpoint:
