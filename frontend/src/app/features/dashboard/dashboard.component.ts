@@ -1,25 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-
-interface LatestVehicleTelemetry {
-  vehicleId: string;
-  vehicleType: string;
-  propulsionType: string;
-  capacity: number;
-  status: string;
-  sourceEventId: string;
-  recordedAt: string;
-  receivedAt: string;
-  latitude: number;
-  longitude: number;
-  speedKph: number;
-  headingDegrees: number;
-  occupancyEstimate: number;
-  batteryPercent: number | null;
-}
+import { LatestVehicleTelemetry, TelemetryApiService } from '../../core/telemetry-api.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -458,7 +441,7 @@ interface LatestVehicleTelemetry {
   `]
 })
 export class DashboardComponent implements OnDestroy {
-  private readonly http = inject(HttpClient);
+  private readonly telemetryApi = inject(TelemetryApiService);
 
   protected apiBase = sessionStorage.getItem('metropulse.apiBase') ?? '/api/v1';
   protected username = sessionStorage.getItem('metropulse.username') ?? 'operator';
@@ -509,9 +492,7 @@ export class DashboardComponent implements OnDestroy {
     this.loading.set(true);
     this.error.set(null);
 
-    this.http.get<LatestVehicleTelemetry[]>(`${this.apiBase}/telemetry/vehicles/latest`, {
-      headers: this.authHeaders()
-    }).pipe(
+    this.telemetryApi.findLatestVehicleTelemetry(this.apiBase, this.username, this.password).pipe(
       finalize(() => this.loading.set(false))
     ).subscribe({
       next: (vehicles) => {
@@ -545,16 +526,6 @@ export class DashboardComponent implements OnDestroy {
 
     window.clearInterval(this.refreshTimer);
     this.refreshTimer = undefined;
-  }
-
-  private authHeaders(): HttpHeaders {
-    if (!this.username || !this.password) {
-      return new HttpHeaders();
-    }
-
-    return new HttpHeaders({
-      Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`
-    });
   }
 
   private average(project: (vehicle: LatestVehicleTelemetry) => number): number {
