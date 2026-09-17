@@ -29,7 +29,18 @@ public enum AlertType {
     LOW_BATTERY(AlertSeverity.MAJOR, Duration.ofSeconds(60), Duration.ofSeconds(120)),
 
     /** The vehicle is carrying at or beyond its rated capacity. */
-    OVER_CAPACITY(AlertSeverity.MINOR, Duration.ofSeconds(60), Duration.ofSeconds(60));
+    OVER_CAPACITY(AlertSeverity.MINOR, Duration.ofSeconds(60), Duration.ofSeconds(60)),
+
+    /** The vehicle is running behind its schedule by more than the tolerance. */
+    VEHICLE_LATE(AlertSeverity.MINOR, Duration.ofSeconds(60), Duration.ofSeconds(120)),
+
+    /**
+     * The vehicle is running ahead of its schedule.
+     *
+     * <p>Treated as seriously as lateness, and often worse: a passenger who arrives on time for a
+     * bus that already left waits a full headway, while a late bus still turns up.
+     */
+    VEHICLE_EARLY(AlertSeverity.MINOR, Duration.ofSeconds(60), Duration.ofSeconds(120));
 
     private final AlertSeverity defaultSeverity;
     private final Duration persistenceWindow;

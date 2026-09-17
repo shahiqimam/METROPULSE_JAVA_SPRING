@@ -225,7 +225,7 @@ class PlaybackIntegrationTest extends PostgisIntegrationTest {
 
     private void ingest(String vehicleId, String sourceEventId, Instant recordedAt, double lat, double lon) {
         ingestionService.ingest(INGEST_KEY, new TelemetryIngestRequest(
-                sourceEventId, vehicleId, recordedAt, lat, lon, 24.0, 90.0, 30, 78));
+                sourceEventId, vehicleId, null, recordedAt, lat, lon, 24.0, 90.0, 30, 78));
     }
 
     private LatestVehicleTelemetry currentState() {

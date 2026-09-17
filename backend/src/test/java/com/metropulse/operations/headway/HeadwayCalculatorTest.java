@@ -21,8 +21,9 @@ class HeadwayCalculatorTest {
                 new VehiclePosition("BUS-4", 0.75, 36.0)
         ), ROUTE_LENGTH_METERS);
 
-        // A quarter of 1600 m is 400 m; at 36 kph (10 m/s) that is 40 seconds.
-        assertThat(pairs).hasSize(4);
+        // A quarter of 1600 m is 400 m; at 36 kph (10 m/s) that is 40 seconds. Three pairs, not
+        // four: the vehicle at the front of the route has nothing ahead of it.
+        assertThat(pairs).hasSize(3);
         assertThat(pairs).allSatisfy(pair -> {
             assertThat(pair.gapMeters()).isCloseTo(400.0, within(0.01));
             assertThat(pair.headwaySeconds()).isCloseTo(40.0, within(0.01));
@@ -37,25 +38,23 @@ class HeadwayCalculatorTest {
                 new VehiclePosition("BUS-3", 0.90, 36.0)
         ), ROUTE_LENGTH_METERS);
 
-        assertThat(pairs).extracting(HeadwayPair::followerVehicleId).containsExactly("BUS-1", "BUS-2", "BUS-3");
-        assertThat(pairs).extracting(HeadwayPair::leaderVehicleId).containsExactly("BUS-2", "BUS-3", "BUS-1");
+        assertThat(pairs).extracting(HeadwayPair::followerVehicleId).containsExactly("BUS-1", "BUS-2");
+        assertThat(pairs).extracting(HeadwayPair::leaderVehicleId).containsExactly("BUS-2", "BUS-3");
     }
 
     @Test
-    void theLastVehicleWrapsAroundToTheFirst() {
+    void theVehicleAtTheFrontOfTheRouteHasNoHeadwayOfItsOwn() {
         List<HeadwayPair> pairs = HeadwayCalculator.calculate(List.of(
                 new VehiclePosition("BUS-1", 0.10, 36.0),
                 new VehiclePosition("BUS-2", 0.90, 36.0)
         ), ROUTE_LENGTH_METERS);
 
-        HeadwayPair wrapped = pairs.stream()
-                .filter(pair -> pair.followerVehicleId().equals("BUS-2"))
-                .findFirst()
-                .orElseThrow();
-
-        // From 0.90 forward to 0.10 is 0.20 of the shape, not -0.80.
-        assertThat(wrapped.leaderVehicleId()).isEqualTo("BUS-1");
-        assertThat(wrapped.gapMeters()).isCloseTo(320.0, within(0.01));
+        // A trip ends at a terminal. Pairing the vehicle approaching it with one back at the start of
+        // the route would invent a bunched pair out of two vehicles a route apart.
+        assertThat(pairs).hasSize(1);
+        assertThat(pairs.getFirst().followerVehicleId()).isEqualTo("BUS-1");
+        assertThat(pairs.getFirst().leaderVehicleId()).isEqualTo("BUS-2");
+        assertThat(pairs.getFirst().gapMeters()).isCloseTo(1_280.0, within(0.01));
     }
 
     @Test
@@ -143,10 +142,10 @@ class HeadwayCalculatorTest {
     @Test
     void theReferenceSpeedIsTheMedianOfTheVehiclesThatAreMoving() {
         List<HeadwayPair> pairs = HeadwayCalculator.calculate(List.of(
-                new VehiclePosition("SLOW", 0.10, 18.0),
-                new VehiclePosition("MID", 0.35, 36.0),
-                new VehiclePosition("FAST", 0.60, 54.0),
-                new VehiclePosition("STOPPED", 0.85, 0.0)
+                new VehiclePosition("STOPPED", 0.10, 0.0),
+                new VehiclePosition("SLOW", 0.35, 18.0),
+                new VehiclePosition("MID", 0.60, 36.0),
+                new VehiclePosition("FAST", 0.85, 54.0)
         ), ROUTE_LENGTH_METERS);
 
         // Median of 18, 36, 54 is 36 kph = 10 m/s; the stopped vehicle's gap is 0.25 of 1600 m.

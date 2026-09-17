@@ -2,6 +2,7 @@ package com.metropulse.analytics.application;
 
 import com.metropulse.analytics.domain.EvAnalytics;
 import com.metropulse.analytics.domain.IncidentAnalytics;
+import com.metropulse.analytics.domain.PunctualityAnalytics;
 import com.metropulse.analytics.domain.ServiceRegularityAnalytics;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -19,16 +20,13 @@ import java.util.Map;
  * <p>Every figure here is computed from rows the platform actually wrote. Nothing is estimated from
  * a model, and nothing that the data cannot support is reported — see the note on punctuality below.
  *
- * <h2>Why there is no punctuality endpoint</h2>
+ * <h2>Punctuality and regularity are different questions</h2>
  *
- * <p>Punctuality means measuring actual arrivals against scheduled ones. MetroPulse stores the
- * schedule and it stores telemetry, but it does not yet detect arrivals at stops, so there is no
- * actual arrival time to compare. Reporting a punctuality number derived from anything else — route
- * progress against elapsed time, say — would be inventing a measurement and labelling it with a word
- * that means something specific in transit.
- *
- * <p>What the data does support is <em>regularity</em>: how evenly spaced the service is running.
- * That is what {@link #serviceRegularity} reports, under its own name.
+ * <p>{@link #punctuality} asks whether the service ran to its timetable, from recorded stop arrivals:
+ * actual against planned. {@link #serviceRegularity} asks whether it ran evenly spaced, from headway
+ * conditions. A frequent service can be perfectly regular and consistently late, or punctual on
+ * average while bunching badly, so both are reported under their own names rather than blended into
+ * one number that answers neither.
  */
 @Service
 public class AnalyticsService {
@@ -37,6 +35,48 @@ public class AnalyticsService {
 
     public AnalyticsService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * Punctuality per route, from recorded stop arrivals.
+     *
+     * <p>The windows are MetroPulse project values: a call is on time from 90 seconds early to 5
+     * minutes late. Asymmetric because passengers experience the two differently — a late bus still
+     * turns up, while an early one has gone.
+     */
+    public List<PunctualityAnalytics> punctuality(Duration window) {
+        return jdbcTemplate.query("""
+                SELECT
+                    r.code AS route_code,
+                    COUNT(*)::int AS measured_calls,
+                    COUNT(*) FILTER (WHERE sa.deviation_seconds BETWEEN -90 AND 300)::int AS on_time,
+                    COUNT(*) FILTER (WHERE sa.deviation_seconds > 300)::int AS late,
+                    COUNT(*) FILTER (WHERE sa.deviation_seconds < -90)::int AS early,
+                    COALESCE(AVG(sa.deviation_seconds), 0)::numeric(10,1) AS average_deviation,
+                    COALESCE(MAX(sa.deviation_seconds), 0)::int AS worst_late,
+                    COALESCE(MIN(sa.deviation_seconds), 0)::int AS worst_early
+                FROM stop_arrival sa
+                JOIN trip t ON t.id = sa.trip_id
+                JOIN route r ON r.id = t.route_id
+                WHERE sa.arrived_at >= ?
+                GROUP BY r.id, r.code
+                ORDER BY r.code
+                """,
+                (rs, rowNum) -> {
+                    int measured = rs.getInt("measured_calls");
+                    int onTime = rs.getInt("on_time");
+                    return new PunctualityAnalytics(
+                            rs.getString("route_code"),
+                            measured,
+                            onTime,
+                            rs.getInt("late"),
+                            rs.getInt("early"),
+                            measured == 0 ? 0.0 : Math.round((onTime * 1000.0) / measured) / 10.0,
+                            rs.getBigDecimal("average_deviation").doubleValue(),
+                            rs.getInt("worst_late"),
+                            rs.getInt("worst_early"));
+                },
+                since(window));
     }
 
     /**

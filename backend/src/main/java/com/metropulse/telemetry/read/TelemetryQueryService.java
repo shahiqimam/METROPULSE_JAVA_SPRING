@@ -44,10 +44,15 @@ public class TelemetryQueryService {
                     r.code AS route_code,
                     vcs.route_progress,
                     vcs.route_deviation_meters,
+                    t.trip_code,
+                    vcs.schedule_deviation_seconds,
+                    ns.name AS next_stop_name,
                     EXTRACT(EPOCH FROM (now() - vcs.recorded_at)) AS telemetry_age_seconds
                 FROM vehicle_current_state vcs
                 JOIN vehicle v ON v.id = vcs.vehicle_id
                 LEFT JOIN route r ON r.id = vcs.route_id
+                LEFT JOIN trip t ON t.id = vcs.active_trip_id
+                LEFT JOIN stop ns ON ns.id = vcs.next_stop_id
                 ORDER BY v.fleet_number
                 """,
                 (rs, rowNum) -> {
@@ -70,6 +75,9 @@ public class TelemetryQueryService {
                             rs.getString("route_code"),
                             rs.getBigDecimal("route_progress"),
                             rs.getBigDecimal("route_deviation_meters"),
+                            rs.getString("trip_code"),
+                            (Integer) rs.getObject("schedule_deviation_seconds"),
+                            rs.getString("next_stop_name"),
                             telemetryAgeSeconds,
                             ConnectivityState.classify(telemetryAgeSeconds));
                 });

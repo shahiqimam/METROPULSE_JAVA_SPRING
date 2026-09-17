@@ -7,6 +7,7 @@ import com.metropulse.schedule.read.ScheduleQueryService;
 import com.metropulse.support.PostgisIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 
@@ -24,6 +25,9 @@ class ScheduleQueryIntegrationTest extends PostgisIntegrationTest {
     @Autowired
     private ScheduleQueryService scheduleQueryService;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @Test
     void routesReportTheirStopAndTripCounts() {
         // Assert on the seeded route by code rather than on how many routes exist: other tests import
@@ -35,7 +39,8 @@ class ScheduleQueryIntegrationTest extends PostgisIntegrationTest {
 
         assertThat(route.agencyName()).isEqualTo("MetroPulse Transit Authority");
         assertThat(route.stopCount()).isEqualTo(5);
-        assertThat(route.tripCount()).isEqualTo(1);
+        // A full weekday of service: every two minutes from 05:00 to 23:00.
+        assertThat(route.tripCount()).isEqualTo(541);
         assertThat(route.routePointCount()).isEqualTo(5);
         assertThat(route.active()).isTrue();
     }
@@ -59,6 +64,20 @@ class ScheduleQueryIntegrationTest extends PostgisIntegrationTest {
     @Test
     void anUnknownRouteHasNoGeometry() {
         assertThat(scheduleQueryService.findRouteGeometry("NOPE")).isEmpty();
+    }
+
+    @Test
+    void everySeededTripHasTheFullStopPattern() {
+        // Schedule adherence is only measurable if every trip has stop times to be measured against.
+        Integer tripsWithoutCalls = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)::int
+                FROM trip t
+                JOIN route r ON r.id = t.route_id
+                WHERE r.code = 'M42'
+                  AND NOT EXISTS (SELECT 1 FROM stop_time st WHERE st.trip_id = t.id)
+                """, Integer.class);
+
+        assertThat(tripsWithoutCalls).isZero();
     }
 
     @Test

@@ -32,6 +32,9 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
 
     private static final String ROUTE = "M42";
 
+    /** The speed the seeded timetable implies: 1,459 m of shape in 270 seconds of driving. */
+    private static final double SCHEDULED_SPEED_KPH = 19.4;
+
     @Autowired
     private HeadwayEvaluator headwayEvaluator;
 
@@ -58,7 +61,7 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
     void theSeededRouteHasALengthAndATargetHeadway() {
         RouteContext route = route();
 
-        assertThat(route.targetHeadwaySeconds()).isEqualTo(55);
+        assertThat(route.targetHeadwaySeconds()).isEqualTo(83);
         assertThat(route.lengthMeters()).isBetween(1_400.0, 1_800.0);
     }
 
@@ -161,11 +164,11 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
 
     @Test
     void aWideGapIsClassifiedAsAnExcessiveGap() {
-        // Three vehicles bunched together and one far behind them.
-        placeVehicle("BUS-042", 0.50, 28.0);
-        placeVehicle("BUS-101", 0.55, 28.0);
-        placeVehicle("BUS-204", 0.60, 28.0);
-        placeVehicle("BUS-317", 0.95, 28.0);
+        // Three vehicles bunched together near the start and one far ahead of them.
+        placeVehicle("BUS-042", 0.05, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-101", 0.10, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-204", 0.15, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-317", 0.95, SCHEDULED_SPEED_KPH);
 
         List<HeadwayCondition> conditions = headwayEvaluator.evaluateRoute(route());
 
@@ -196,9 +199,10 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
         RouteHeadwaySnapshot snapshot = headwayQueryService.findRouteHeadway(ROUTE).orElseThrow();
 
         assertThat(snapshot.routeCode()).isEqualTo(ROUTE);
-        assertThat(snapshot.targetHeadwaySeconds()).isEqualTo(55);
+        assertThat(snapshot.targetHeadwaySeconds()).isEqualTo(83);
         assertThat(snapshot.vehiclesConsidered()).isEqualTo(4);
-        assertThat(snapshot.pairs()).hasSize(4);
+        // Three pairs from four vehicles: the one at the front of the route has nothing ahead of it.
+        assertThat(snapshot.pairs()).hasSize(3);
         assertThat(snapshot.pairs())
                 .extracting(RouteHeadwaySnapshot.HeadwayPairView::classification)
                 .contains("BUNCHING", "NOMINAL");
@@ -219,20 +223,26 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
         assertThat(headwayQueryService.findRouteHeadway("NOPE")).isEmpty();
     }
 
-    /** The whole fleet at nominal spacing: a quarter of the shape apart. */
+    /**
+     * The whole fleet at nominal spacing, driving at the speed the timetable implies.
+     *
+     * <p>Roughly 0.3 of the shape apart, which at that speed is the route's 83-second target. The
+     * speed matters as much as the spacing: headway is measured in time, so the same gap at twice the
+     * speed is half the headway.
+     */
     private void spaceFleetEvenly() {
-        placeVehicle("BUS-042", 0.00, 28.0);
-        placeVehicle("BUS-101", 0.25, 28.0);
-        placeVehicle("BUS-204", 0.50, 28.0);
-        placeVehicle("BUS-317", 0.75, 28.0);
+        placeVehicle("BUS-042", 0.00, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-101", 0.30, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-204", 0.60, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-317", 0.90, SCHEDULED_SPEED_KPH);
     }
 
     /** Puts BUS-101 right behind BUS-042, with the other two evenly spaced away from them. */
     private void bunchTwoVehicles() {
-        placeVehicle("BUS-042", 0.52, 28.0);
-        placeVehicle("BUS-101", 0.50, 28.0);
-        placeVehicle("BUS-204", 0.80, 28.0);
-        placeVehicle("BUS-317", 0.20, 28.0);
+        placeVehicle("BUS-042", 0.52, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-101", 0.50, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-204", 0.80, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-317", 0.20, SCHEDULED_SPEED_KPH);
     }
 
     private RouteContext route() {

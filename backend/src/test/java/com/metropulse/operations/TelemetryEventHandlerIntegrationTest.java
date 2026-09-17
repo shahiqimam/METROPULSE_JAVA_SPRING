@@ -170,7 +170,7 @@ class TelemetryEventHandlerIntegrationTest extends PostgisIntegrationTest {
 
     private void ingest(String sourceEventId, Instant recordedAt, double latitude, double longitude) {
         ingestionService.ingest(INGEST_KEY, new TelemetryIngestRequest(
-                sourceEventId, VEHICLE, recordedAt, latitude, longitude, 24.0, 90.0, 30, 78));
+                sourceEventId, VEHICLE, null, recordedAt, latitude, longitude, 24.0, 90.0, 30, 78));
     }
 
     private String envelope(UUID eventId, String eventType, String payloadJson) {

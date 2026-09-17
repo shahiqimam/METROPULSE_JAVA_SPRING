@@ -102,6 +102,7 @@ public class TelemetryEventHandler {
             return new VehicleObservation(
                     requiredText(payload, "sourceEventId"),
                     requiredText(payload, "vehicleId"),
+                    payload.hasNonNull("tripId") ? payload.get("tripId").asText() : null,
                     Instant.parse(requiredText(payload, "recordedAt")),
                     payload.hasNonNull("receivedAt")
                             ? Instant.parse(payload.get("receivedAt").asText())

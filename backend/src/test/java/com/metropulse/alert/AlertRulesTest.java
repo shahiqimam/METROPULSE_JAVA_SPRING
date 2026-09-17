@@ -110,6 +110,62 @@ class AlertRulesTest {
     }
 
     @Test
+    void aVehicleWellBehindItsScheduleRaisesVehicleLate() {
+        List<AlertSignal> signals = evaluate(vehicle().scheduleDeviationSeconds(400).build());
+
+        assertThat(signals).singleElement().satisfies(signal -> {
+            assertThat(signal.type()).isEqualTo(AlertType.VEHICLE_LATE);
+            assertThat(signal.details()).containsEntry("scheduleDeviationSeconds", 400);
+        });
+    }
+
+    @Test
+    void aVehicleRunningAheadOfItsScheduleRaisesVehicleEarly() {
+        // Early is treated as its own problem: a passenger who arrives on time for a bus that has
+        // already gone waits a full headway.
+        assertThat(evaluate(vehicle().scheduleDeviationSeconds(-120).build()))
+                .extracting(AlertSignal::type)
+                .containsExactly(AlertType.VEHICLE_EARLY);
+    }
+
+    @Test
+    void theScheduleTolerancesAreAsymmetric() {
+        // Five minutes late is acceptable; ninety seconds early is not.
+        assertThat(evaluate(vehicle().scheduleDeviationSeconds(AlertRules.LATE_OPEN_SECONDS - 1).build())).isEmpty();
+        assertThat(evaluate(vehicle().scheduleDeviationSeconds(AlertRules.EARLY_OPEN_SECONDS + 1).build())).isEmpty();
+        assertThat(evaluate(vehicle().scheduleDeviationSeconds(AlertRules.LATE_OPEN_SECONDS).build())).hasSize(1);
+        assertThat(evaluate(vehicle().scheduleDeviationSeconds(AlertRules.EARLY_OPEN_SECONDS).build())).hasSize(1);
+    }
+
+    @Test
+    void aLateVehicleKeepsItsAlertUntilItIsWellBackOnSchedule() {
+        String fingerprint = AlertType.VEHICLE_LATE + "|BUS-042";
+        LatestVehicleTelemetry recovering = vehicle().scheduleDeviationSeconds(240).build();
+
+        assertThat(evaluate(recovering)).as("240s alone would not open an alert").isEmpty();
+        assertThat(AlertRules.evaluate(List.of(recovering), List.of(), Set.of(fingerprint)))
+                .as("but it is not yet inside the clear band")
+                .hasSize(1);
+    }
+
+    @Test
+    void aVehicleWithNoMeasuredDeviationRaisesNothing() {
+        // Before its first call there is nothing to measure against, and guessing would be worse.
+        assertThat(evaluate(vehicle().scheduleDeviationSeconds(null).build())).isEmpty();
+    }
+
+    @Test
+    void anOfflineVehicleIsNotJudgedAgainstItsSchedule() {
+        List<AlertSignal> signals = evaluate(vehicle()
+                .connectivity(ConnectivityState.OFFLINE)
+                .telemetryAgeSeconds(300)
+                .scheduleDeviationSeconds(900)
+                .build());
+
+        assertThat(signals).extracting(AlertSignal::type).containsExactly(AlertType.TELEMETRY_OFFLINE);
+    }
+
+    @Test
     void confirmedHeadwayConditionsBecomeAlerts() {
         List<AlertSignal> signals = AlertRules.evaluate(
                 List.of(),
@@ -187,6 +243,7 @@ class AlertRulesTest {
         private Integer batteryPercent = 80;
         private int occupancy = 20;
         private int capacity = 80;
+        private Integer scheduleDeviationSeconds = 0;
 
         VehicleBuilder connectivity(ConnectivityState connectivity) {
             this.connectivity = connectivity;
@@ -218,6 +275,11 @@ class AlertRulesTest {
             return this;
         }
 
+        VehicleBuilder scheduleDeviationSeconds(Integer scheduleDeviationSeconds) {
+            this.scheduleDeviationSeconds = scheduleDeviationSeconds;
+            return this;
+        }
+
         LatestVehicleTelemetry build() {
             return new LatestVehicleTelemetry(
                     "BUS-042",
@@ -237,6 +299,9 @@ class AlertRulesTest {
                     "M42",
                     new BigDecimal("0.5"),
                     BigDecimal.valueOf(deviationMeters),
+                    "M42-WKD-0700-EAST",
+                    scheduleDeviationSeconds,
+                    "Central Library",
                     telemetryAgeSeconds,
                     connectivity);
         }

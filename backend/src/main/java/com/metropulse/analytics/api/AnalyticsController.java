@@ -3,6 +3,7 @@ package com.metropulse.analytics.api;
 import com.metropulse.analytics.application.AnalyticsService;
 import com.metropulse.analytics.domain.EvAnalytics;
 import com.metropulse.analytics.domain.IncidentAnalytics;
+import com.metropulse.analytics.domain.PunctualityAnalytics;
 import com.metropulse.analytics.domain.ServiceRegularityAnalytics;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,6 +33,13 @@ public class AnalyticsController {
         this.analyticsService = analyticsService;
     }
 
+    /** Did the service run to its timetable? Measured from recorded stop arrivals. */
+    @GetMapping("/punctuality")
+    public List<PunctualityAnalytics> punctuality(@RequestParam(required = false) Integer windowHours) {
+        return analyticsService.punctuality(window(windowHours));
+    }
+
+    /** Did the service run evenly spaced? A different question from punctuality. */
     @GetMapping("/service-regularity")
     public List<ServiceRegularityAnalytics> serviceRegularity(@RequestParam(required = false) Integer windowHours) {
         return analyticsService.serviceRegularity(window(windowHours));

@@ -4,6 +4,7 @@ package com.metropulse.simulator.scenario;
 public final class SimulatedVehicle {
 
     private final String vehicleId;
+    private String tripCode;
     private double routeProgress;
     private double speedKph;
     private double batteryPercent;
@@ -18,6 +19,24 @@ public final class SimulatedVehicle {
 
     public String vehicleId() {
         return vehicleId;
+    }
+
+    /** The scheduled trip this vehicle is currently operating. */
+    public String tripCode() {
+        return tripCode;
+    }
+
+    /**
+     * Puts the vehicle at the start of a new trip.
+     *
+     * <p>A vehicle that has finished its run is at the eastern terminal and its next departure leaves
+     * from the western one. The return leg is not simulated, so the vehicle appears at the start of
+     * the shape rather than driving back down it: the platform sees a vehicle that has begun a new
+     * trip, which is true, having skipped a movement that was never reported anyway.
+     */
+    public void beginTrip(String tripCode) {
+        this.tripCode = tripCode;
+        this.routeProgress = 0.0;
     }
 
     public double routeProgress() {
@@ -44,10 +63,9 @@ public final class SimulatedVehicle {
         this.occupancyEstimate = Math.max(0, occupancyEstimate);
     }
 
-    /** Advances along the route, wrapping back to the start so the vehicle keeps running the shape. */
+    /** Advances along the route, stopping at the end: a trip finishes at its last stop. */
     public void advance(double progressDelta) {
-        double next = routeProgress + progressDelta;
-        this.routeProgress = next - Math.floor(next);
+        this.routeProgress = Math.min(1.0, routeProgress + progressDelta);
     }
 
     /**

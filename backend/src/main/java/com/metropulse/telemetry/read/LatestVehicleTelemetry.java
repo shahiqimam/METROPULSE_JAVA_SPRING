@@ -29,6 +29,10 @@ public record LatestVehicleTelemetry(
         String routeCode,
         BigDecimal routeProgress,
         BigDecimal routeDeviationMeters,
+        String tripCode,
+        /** Positive is late, negative is early, null when the vehicle has not yet called at a stop. */
+        Integer scheduleDeviationSeconds,
+        String nextStopName,
         double telemetryAgeSeconds,
         ConnectivityState connectivityState
 ) {

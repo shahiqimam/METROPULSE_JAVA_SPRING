@@ -1,5 +1,6 @@
 package com.metropulse.operations.projection;
 
+import com.metropulse.operations.schedule.StopArrivalDetector;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -27,9 +28,11 @@ import java.time.OffsetDateTime;
 public class VehicleStateProjection {
 
     private final JdbcTemplate jdbcTemplate;
+    private final StopArrivalDetector stopArrivalDetector;
 
-    public VehicleStateProjection(JdbcTemplate jdbcTemplate) {
+    public VehicleStateProjection(JdbcTemplate jdbcTemplate, StopArrivalDetector stopArrivalDetector) {
         this.jdbcTemplate = jdbcTemplate;
+        this.stopArrivalDetector = stopArrivalDetector;
     }
 
     /**
@@ -43,6 +46,13 @@ public class VehicleStateProjection {
         if (vehicleRowId == null) {
             throw new UnknownVehicleInEventException(observation.vehicleId());
         }
+
+        Long tripRowId = findTripRowId(observation.tripId());
+
+        // Arrivals are detected before the upsert so the deviation this observation produces is the
+        // one stored with it, rather than lagging a tick behind.
+        StopArrivalDetector.ScheduleAdherence adherence =
+                stopArrivalDetector.apply(observation, tripRowId, vehicleRowId);
 
         int updated = jdbcTemplate.update("""
                 INSERT INTO vehicle_current_state (
@@ -58,6 +68,9 @@ public class VehicleStateProjection {
                     route_id,
                     route_progress,
                     route_deviation_meters,
+                    active_trip_id,
+                    schedule_deviation_seconds,
+                    next_stop_id,
                     updated_at
                 )
                 SELECT
@@ -73,6 +86,9 @@ public class VehicleStateProjection {
                     route.id,
                     ST_LineLocatePoint(route.geometry, observation.location),
                     ST_Distance(route.geometry::geography, observation.location::geography),
+                    ?,
+                    ?,
+                    ?,
                     now()
                 FROM vehicle
                 CROSS JOIN LATERAL (
@@ -92,6 +108,9 @@ public class VehicleStateProjection {
                     route_id = EXCLUDED.route_id,
                     route_progress = EXCLUDED.route_progress,
                     route_deviation_meters = EXCLUDED.route_deviation_meters,
+                    active_trip_id = EXCLUDED.active_trip_id,
+                    schedule_deviation_seconds = EXCLUDED.schedule_deviation_seconds,
+                    next_stop_id = EXCLUDED.next_stop_id,
                     updated_at = now()
                 WHERE vehicle_current_state.recorded_at < EXCLUDED.recorded_at
                    OR (
@@ -106,11 +125,25 @@ public class VehicleStateProjection {
                 observation.headingDegrees(),
                 observation.occupancyEstimate(),
                 observation.batteryPercent(),
+                tripRowId,
+                adherence.deviationSeconds(),
+                adherence.nextStopId(),
                 observation.longitude(),
                 observation.latitude(),
                 vehicleRowId);
 
         return updated > 0;
+    }
+
+    /** Null when the vehicle reported no trip, or a code that does not exist. */
+    private Long findTripRowId(String tripCode) {
+        if (tripCode == null || tripCode.isBlank()) {
+            return null;
+        }
+        return jdbcTemplate.query(
+                "SELECT id FROM trip WHERE trip_code = ?",
+                rs -> rs.next() ? rs.getLong("id") : null,
+                tripCode);
     }
 
     private Long findVehicleRowId(String fleetNumber) {

@@ -73,7 +73,7 @@ class AnalyticsIntegrationTest extends PostgisIntegrationTest {
                 .singleElement()
                 .satisfies(route -> {
                     assertThat(route.routeCode()).isEqualTo("M42");
-                    assertThat(route.targetHeadwaySeconds()).isEqualTo(55);
+                    assertThat(route.targetHeadwaySeconds()).isEqualTo(83);
                     assertThat(route.conditionsNow()).isZero();
                     assertThat(route.bunchingAlertsInWindow()).isZero();
                 });

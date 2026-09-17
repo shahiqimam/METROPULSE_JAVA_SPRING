@@ -12,6 +12,7 @@ import java.time.Instant;
 public record VehicleObservation(
         String sourceEventId,
         String vehicleId,
+        String tripId,
         Instant recordedAt,
         Instant receivedAt,
         double latitude,

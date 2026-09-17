@@ -158,7 +158,7 @@ class TelemetryIngestionIntegrationTest extends PostgisIntegrationTest {
     @Test
     void unknownVehicleIsRejectedAndStoresNothing() {
         var request = new TelemetryIngestRequest(
-                UUID.randomUUID().toString(), "BUS-does-not-exist", Instant.now(),
+                UUID.randomUUID().toString(), "BUS-does-not-exist", null, Instant.now(),
                 33.7012, 73.0188, 10.0, 90.0, 5, 80);
 
         assertThatThrownBy(() -> ingestionService.ingest(INGEST_KEY, request))
@@ -186,7 +186,7 @@ class TelemetryIngestionIntegrationTest extends PostgisIntegrationTest {
             Integer batteryPercent
     ) {
         return new TelemetryIngestRequest(
-                sourceEventId, VEHICLE, recordedAt, latitude, longitude, speedKph, 180.0, 42, batteryPercent);
+                sourceEventId, VEHICLE, null, recordedAt, latitude, longitude, speedKph, 180.0, 42, batteryPercent);
     }
 
     private LatestVehicleTelemetry currentStateFor(String fleetNumber) {

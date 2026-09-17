@@ -68,6 +68,7 @@ public class TelemetryIngestionService {
                     INSERT INTO vehicle_telemetry (
                         source_event_id,
                         vehicle_id,
+                        trip_id,
                         recorded_at,
                         received_at,
                         location,
@@ -77,10 +78,14 @@ public class TelemetryIngestionService {
                         battery_percent,
                         raw_payload
                     )
-                    VALUES (?, ?, ?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?, ?, ?, ?, CAST(? AS jsonb))
+                    VALUES (
+                        ?, ?,
+                        (SELECT id FROM trip WHERE trip_code = ?),
+                        ?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?, ?, ?, ?, CAST(? AS jsonb))
                     """,
                     request.sourceEventId(),
                     vehicleRowId,
+                    request.tripId(),
                     recordedAt,
                     receivedAt,
                     request.longitude(),
@@ -130,6 +135,7 @@ public class TelemetryIngestionService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sourceEventId", request.sourceEventId());
         payload.put("vehicleId", request.vehicleId());
+        payload.put("tripId", request.tripId());
         payload.put("recordedAt", request.recordedAt().toString());
         payload.put("receivedAt", receivedAt.toInstant().toString());
         payload.put("latitude", request.latitude());

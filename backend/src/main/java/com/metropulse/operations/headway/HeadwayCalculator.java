@@ -35,10 +35,10 @@ import java.util.List;
  *
  * <h2>Shape of the route</h2>
  *
- * <p>The route is treated as a loop: the last vehicle's leader is the first, wrapping past the end of
- * the shape. That suits the development simulator, which runs the shape continuously. A scheduled
- * service that starts and ends a trip would want the open-ended form, where the vehicle in front has
- * no follower.
+ * <p>The route is open-ended: a trip runs from one terminal to the other, so the vehicle in front has
+ * nothing ahead of it and produces no pair. Treating the shape as a loop instead would pair the
+ * leading vehicle with whichever one was sitting at the far terminal between trips, and report that
+ * pair - a kilometre and a half apart, one of them not even in service yet - as severe bunching.
  */
 public final class HeadwayCalculator {
 
@@ -58,7 +58,8 @@ public final class HeadwayCalculator {
      *
      * @param vehicles          vehicles on one route, in any order; fewer than two produces no pairs
      * @param routeLengthMeters length of the route shape
-     * @return one entry per vehicle, ordered by position along the shape
+     * @return one entry per follower, ordered by position along the shape; the leading vehicle has
+     *         no pair of its own
      */
     public static List<HeadwayPair> calculate(List<VehiclePosition> vehicles, double routeLengthMeters) {
         if (vehicles == null || vehicles.size() < 2 || routeLengthMeters <= 0) {
@@ -71,10 +72,10 @@ public final class HeadwayCalculator {
 
         Double referenceSpeedKph = referenceSpeedKph(ordered);
 
-        List<HeadwayPair> pairs = new ArrayList<>(ordered.size());
-        for (int index = 0; index < ordered.size(); index++) {
+        List<HeadwayPair> pairs = new ArrayList<>(ordered.size() - 1);
+        for (int index = 0; index < ordered.size() - 1; index++) {
             VehiclePosition follower = ordered.get(index);
-            VehiclePosition leader = ordered.get((index + 1) % ordered.size());
+            VehiclePosition leader = ordered.get(index + 1);
 
             double gapMeters = gapMeters(follower.routeProgress(), leader.routeProgress(), routeLengthMeters);
             pairs.add(pair(leader, follower, gapMeters, referenceSpeedKph));
@@ -124,13 +125,9 @@ public final class HeadwayCalculator {
         return moving.get(moving.size() / 2);
     }
 
-    /** Distance from the follower forward to the leader, wrapping around the end of the shape. */
+    /** Distance from the follower forward to the leader along the shape. */
     private static double gapMeters(double followerProgress, double leaderProgress, double routeLengthMeters) {
-        double gap = leaderProgress - followerProgress;
-        if (gap <= 0) {
-            gap += 1.0;
-        }
-        return gap * routeLengthMeters;
+        return Math.max(0.0, leaderProgress - followerProgress) * routeLengthMeters;
     }
 
     private static double secondsToCover(double gapMeters, double speedKph) {

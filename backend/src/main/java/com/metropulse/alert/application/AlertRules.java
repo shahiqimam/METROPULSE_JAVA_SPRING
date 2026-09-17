@@ -37,6 +37,18 @@ public final class AlertRules {
     public static final double OVER_CAPACITY_OPEN_RATIO = 1.0;
     public static final double OVER_CAPACITY_CLEAR_RATIO = 0.9;
 
+    /**
+     * Schedule tolerances, in seconds.
+     *
+     * <p>Asymmetric on purpose. Running late is normal in traffic and only worth saying when it is
+     * substantial; running early is a choice the driver made, and a passenger who arrives on time for
+     * a bus that already left waits a full headway. Five minutes late, ninety seconds early.
+     */
+    public static final int LATE_OPEN_SECONDS = 300;
+    public static final int LATE_CLEAR_SECONDS = 180;
+    public static final int EARLY_OPEN_SECONDS = -90;
+    public static final int EARLY_CLEAR_SECONDS = -45;
+
     private AlertRules() {
     }
 
@@ -56,6 +68,7 @@ public final class AlertRules {
         for (LatestVehicleTelemetry vehicle : vehicles) {
             telemetryOffline(vehicle).ifPresent(signals::add);
             routeDeviation(vehicle, liveFingerprints).ifPresent(signals::add);
+            scheduleAdherence(vehicle, liveFingerprints).forEach(signals::add);
             lowBattery(vehicle, liveFingerprints).ifPresent(signals::add);
             overCapacity(vehicle, liveFingerprints).ifPresent(signals::add);
         }
@@ -108,6 +121,56 @@ public final class AlertRules {
 
         return java.util.Optional.of(AlertSignal.forVehicle(
                 AlertType.ROUTE_DEVIATION, vehicle.vehicleId(), vehicle.routeCode(), details));
+    }
+
+    /**
+     * Running late or early against the trip's schedule.
+     *
+     * <p>Only measurable once the vehicle has called at a stop: between stops the stored deviation is
+     * carried forward from the last call rather than interpolated, and a vehicle that has not reached
+     * its first stop has nothing to be measured against.
+     */
+    private static List<AlertSignal> scheduleAdherence(
+            LatestVehicleTelemetry vehicle,
+            Set<String> liveFingerprints
+    ) {
+        if (vehicle.scheduleDeviationSeconds() == null
+                || vehicle.connectivityState() == ConnectivityState.OFFLINE) {
+            return List.of();
+        }
+
+        int deviation = vehicle.scheduleDeviationSeconds();
+        List<AlertSignal> signals = new ArrayList<>();
+
+        String lateFingerprint = AlertType.VEHICLE_LATE.name() + "|" + vehicle.vehicleId();
+        int lateThreshold = liveFingerprints.contains(lateFingerprint)
+                ? LATE_CLEAR_SECONDS
+                : LATE_OPEN_SECONDS;
+        if (deviation >= lateThreshold) {
+            signals.add(AlertSignal.forVehicle(
+                    AlertType.VEHICLE_LATE, vehicle.vehicleId(), vehicle.routeCode(),
+                    scheduleDetails(vehicle, deviation)));
+        }
+
+        String earlyFingerprint = AlertType.VEHICLE_EARLY.name() + "|" + vehicle.vehicleId();
+        int earlyThreshold = liveFingerprints.contains(earlyFingerprint)
+                ? EARLY_CLEAR_SECONDS
+                : EARLY_OPEN_SECONDS;
+        if (deviation <= earlyThreshold) {
+            signals.add(AlertSignal.forVehicle(
+                    AlertType.VEHICLE_EARLY, vehicle.vehicleId(), vehicle.routeCode(),
+                    scheduleDetails(vehicle, deviation)));
+        }
+
+        return signals;
+    }
+
+    private static Map<String, Object> scheduleDetails(LatestVehicleTelemetry vehicle, int deviation) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("scheduleDeviationSeconds", deviation);
+        details.put("tripCode", vehicle.tripCode());
+        details.put("nextStopName", vehicle.nextStopName());
+        return details;
     }
 
     private static java.util.Optional<AlertSignal> lowBattery(

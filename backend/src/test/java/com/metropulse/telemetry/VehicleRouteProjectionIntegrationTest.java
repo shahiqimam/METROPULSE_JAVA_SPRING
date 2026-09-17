@@ -128,7 +128,7 @@ class VehicleRouteProjectionIntegrationTest extends PostgisIntegrationTest {
             double longitude
     ) {
         ingestionService.ingest(INGEST_KEY, new TelemetryIngestRequest(
-                sourceEventId, fleetNumber, recordedAt, latitude, longitude, 24.0, 90.0, 30, 78));
+                sourceEventId, fleetNumber, null, recordedAt, latitude, longitude, 24.0, 90.0, 30, 78));
         outboxPipeline.drain();
     }
 

@@ -7,16 +7,32 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * The simulator's job is to produce movement a control centre could plausibly be watching, and to
+ * produce it without ever asserting the thing the platform is supposed to work out for itself.
+ *
+ * <p>Time advances with the ticks here rather than standing still, because the fleet runs to a
+ * timetable: a test that passed the same instant to every tick would be asking vehicles to keep a
+ * schedule in a world where the clock had stopped.
+ */
 class FleetSimulatorTest {
 
     private static final List<String> FLEET = List.of("BUS-042", "BUS-101", "BUS-204", "BUS-317");
     private static final Duration TICK = Duration.ofSeconds(2);
-    private static final Instant NOW = Instant.parse("2026-09-17T09:00:00Z");
+
+    /** 09:00 in the network's own timezone, in the middle of the seeded service day. */
+    private static final Instant NINE_AM = Instant.parse("2026-09-17T13:00:00Z");
+
+    /** The seeded pattern: 390 seconds from the first departure to the last arrival. */
+    private static final int TRIP_SECONDS = 390;
+
+    /** The same trip counted in ticks, which is what the simulator advances in. */
+    private static final int TRIP_TICKS = TRIP_SECONDS / (int) TICK.toSeconds();
 
     private final RoutePath route = new RoutePath(List.of(
             new GeoPoint(40.7128, -74.0060),
@@ -29,100 +45,161 @@ class FleetSimulatorTest {
     void normalOperationKeepsEveryVehicleOnTheRouteShape() {
         FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
 
-        for (int tick = 0; tick < 60; tick++) {
-            for (TelemetryIngestPayload payload : simulator.tick(NOW)) {
-                assertThat(distanceToShape(payload))
-                        .as("%s should stay on the route shape", payload.vehicleId())
-                        .isLessThan(1.0);
-            }
+        for (TelemetryIngestPayload payload : run(simulator, 200)) {
+            assertThat(distanceToShape(payload))
+                    .as("%s should stay on the route shape", payload.vehicleId())
+                    .isLessThan(1.0);
         }
     }
 
     @Test
-    void vehiclesStartEvenlySpacedAndAdvanceAlongTheShape() {
+    void everyVehicleWaitsAtTheTerminalUntilItsOwnDepartureTime() {
         FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
 
-        assertThat(simulator.fleet().stream().map(SimulatedVehicle::routeProgress))
-                .containsExactly(0.0, 0.25, 0.5, 0.75);
-
-        simulator.tick(NOW);
+        // A minute in: the 09:00 departure has gone, the 09:02, 09:04 and 09:06 have not.
+        run(simulator, 30);
 
         assertThat(simulator.fleet().getFirst().routeProgress()).isGreaterThan(0.0);
-        assertThat(simulator.fleet().getFirst().speedKph()).isBetween(26.0, 32.0);
+        assertThat(simulator.fleet().subList(1, 4))
+                .as("vehicles hold at the terminal rather than leaving early")
+                .allSatisfy(vehicle -> assertThat(vehicle.routeProgress()).isZero());
+    }
+
+    @Test
+    void aVehicleRunsTheWholeTripInTheTimeTheTimetableAllows() {
+        FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
+
+        run(simulator, TRIP_TICKS / 2);
+        assertThat(simulator.fleet().getFirst().routeProgress())
+                .as("halfway through the trip it is somewhere in the middle of the route")
+                .isBetween(0.2, 0.8);
+
+        run(simulator, TRIP_TICKS / 2 + 2);
+        assertThat(simulator.fleet().getFirst().routeProgress())
+                .as("it reaches the far terminal as its trip ends")
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void aVehicleStandsStillAtEveryStopOnItsTrip() {
+        FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
+        double[] stops = route.vertexProgress();
+
+        List<Double> stationaryAt = new ArrayList<>();
+        for (int tick = 0; tick < TRIP_TICKS + 5; tick++) {
+            simulator.tick(NINE_AM.plus(TICK.multipliedBy(tick + 1)));
+            SimulatedVehicle vehicle = simulator.fleet().getFirst();
+            if (vehicle.speedKph() == 0.0) {
+                stationaryAt.add(vehicle.routeProgress());
+            }
+        }
+
+        // Standing at a stop is what makes a vehicle observable as having called there rather than
+        // driven past, and it is the only reason schedule adherence can be measured at all.
+        for (double stop : stops) {
+            assertThat(stationaryAt)
+                    .as("the vehicle should stand still at the stop at %.3f along the route", stop)
+                    .anySatisfy(progress -> assertThat(progress).isEqualTo(stop, within(0.001)));
+        }
+    }
+
+    @Test
+    void drivingSpeedIsTheOneTheTimetableImplies() {
+        FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
+
+        List<Double> movingSpeeds = run(simulator, TRIP_TICKS).stream()
+                .map(TelemetryIngestPayload::speedKph)
+                .filter(speed -> speed > 0.0)
+                .toList();
+
+        double average = movingSpeeds.stream().mapToDouble(Double::doubleValue).average().orElseThrow();
+        assertThat(average)
+                .as("a fleet driven at a speed of its own choosing would make every deviation meaningless")
+                .isCloseTo(simulator.scheduledSpeedKph(), within(2.0));
+        assertThat(simulator.scheduledSpeedKph())
+                .as("1,459 m of shape in 270 s of driving")
+                .isCloseTo(19.4, within(0.5));
+    }
+
+    @Test
+    void aVehicleTakesAFreshTripOnceItsOwnIsDone() {
+        FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
+        run(simulator, 10);
+        String firstTrip = simulator.fleet().getFirst().tripCode();
+
+        // Four vehicles two minutes apart come round again after eight minutes.
+        run(simulator, 250);
+
+        SimulatedVehicle vehicle = simulator.fleet().getFirst();
+        assertThat(vehicle.tripCode()).isNotEqualTo(firstTrip);
+        assertThat(vehicle.tripCode()).matches("M42-WKD-\\d{4}-EAST");
+        assertThat(vehicle.routeProgress())
+                .as("a new trip starts from the terminal, not from wherever the last one ended")
+                .isLessThan(0.5);
     }
 
     @Test
     void theSameSeedProducesTheSameRun() {
-        List<TelemetryIngestPayload> first = run(simulator(ScenarioType.NORMAL_OPERATION), 20);
-        List<TelemetryIngestPayload> second = run(simulator(ScenarioType.NORMAL_OPERATION), 20);
+        List<TelemetryIngestPayload> first = run(simulator(ScenarioType.NORMAL_OPERATION), 60);
+        List<TelemetryIngestPayload> second = run(simulator(ScenarioType.NORMAL_OPERATION), 60);
 
         assertThat(positionsOf(first)).isEqualTo(positionsOf(second));
     }
 
     @Test
-    void bunchingClosesTheGapBehindTheSlowLeader() {
-        FleetSimulator simulator = simulator(ScenarioType.BUNCHING);
-        double initialTightestGap = tightestGap(simulator);
+    void aSlowedVehicleFallsBehindItsTimetableRatherThanCatchingUpForFree() {
+        FleetSimulator normal = simulator(ScenarioType.NORMAL_OPERATION);
+        FleetSimulator bunching = simulator(ScenarioType.BUNCHING);
 
-        IntStream.range(0, 120).forEach(tick -> simulator.tick(NOW));
+        run(normal, 120);
+        run(bunching, 120);
 
-        // Somewhere in the fleet, two vehicles are now closer together than any pair started out.
-        assertThat(tightestGap(simulator)).isLessThan(initialTightestGap);
+        // BUS-042 crawls under BUNCHING. Time it loses has to stay lost, or the delay the platform is
+        // meant to detect would quietly undo itself.
+        assertThat(bunching.fleet().getFirst().routeProgress())
+                .isLessThan(normal.fleet().getFirst().routeProgress());
     }
 
     @Test
-    void aFollowerHoldsStationBehindASlowLeaderRatherThanDrivingThroughIt() {
+    void aFollowerClosesOnTheSlowLeaderWithoutDrivingThroughIt() {
         FleetSimulator simulator = simulator(ScenarioType.BUNCHING);
 
-        // BUS-042 crawls; the vehicle behind it closes up and then has to queue.
-        IntStream.range(0, 400).forEach(tick -> simulator.tick(NOW));
+        run(simulator, 200);
 
         SimulatedVehicle slowLeader = simulator.fleet().getFirst();
         double closest = simulator.fleet().stream()
                 .filter(vehicle -> !vehicle.vehicleId().equals(slowLeader.vehicleId()))
-                .mapToDouble(vehicle -> gapBehind(vehicle, slowLeader))
+                .filter(vehicle -> vehicle.routeProgress() > 0.0)
+                .mapToDouble(vehicle -> slowLeader.routeProgress() - vehicle.routeProgress())
+                .filter(gap -> gap >= 0.0)
                 .min()
                 .orElseThrow();
 
-        // Someone is queued right behind it, and nobody has passed through it.
-        assertThat(closest).isLessThan(0.05);
+        // Someone has caught it up, and nobody has passed through it.
+        assertThat(closest).isLessThan(0.25);
         assertThat(closest).isGreaterThanOrEqualTo(0.0);
-    }
-
-    @Test
-    void bunchingPersistsOnceItHasFormed() {
-        FleetSimulator simulator = simulator(ScenarioType.BUNCHING);
-        IntStream.range(0, 400).forEach(tick -> simulator.tick(NOW));
-
-        // Once a queue has formed behind the slow leader it should still be there later, rather than
-        // dissolving as vehicles drive through each other.
-        double before = tightestGap(simulator);
-        IntStream.range(0, 120).forEach(tick -> simulator.tick(NOW));
-
-        assertThat(tightestGap(simulator)).isLessThan(0.08);
-        assertThat(before).isLessThan(0.08);
     }
 
     @Test
     void routeDeviationPlacesOneVehicleWellOffTheShapeAndLeavesTheRestOnIt() {
         FleetSimulator simulator = simulator(ScenarioType.ROUTE_DEVIATION);
 
-        List<TelemetryIngestPayload> payloads = simulator.tick(NOW);
+        List<TelemetryIngestPayload> payloads = run(simulator, 60);
 
-        assertThat(distanceToShape(payloadFor(payloads, "BUS-042"))).isGreaterThan(100.0);
-        assertThat(distanceToShape(payloadFor(payloads, "BUS-101"))).isLessThan(1.0);
+        assertThat(distanceToShape(lastPayloadFor(payloads, "BUS-042"))).isGreaterThan(100.0);
+        assertThat(distanceToShape(lastPayloadFor(payloads, "BUS-101"))).isLessThan(1.0);
     }
 
     @Test
     void telemetryLossSilencesOneVehicleAndLaterRestoresIt() {
         FleetSimulator simulator = simulator(ScenarioType.TELEMETRY_LOSS);
 
-        List<TelemetryIngestPayload> duringOutage = simulator.tick(NOW);
+        List<TelemetryIngestPayload> duringOutage = simulator.tick(NINE_AM.plus(TICK));
         assertThat(reportingVehicles(duringOutage)).doesNotContain("BUS-204").hasSize(3);
 
         List<TelemetryIngestPayload> afterOutage = null;
-        for (int tick = 0; tick < 200; tick++) {
-            List<TelemetryIngestPayload> payloads = simulator.tick(NOW);
+        for (int tick = 2; tick < 200; tick++) {
+            List<TelemetryIngestPayload> payloads = simulator.tick(NINE_AM.plus(TICK.multipliedBy(tick)));
             if (reportingVehicles(payloads).contains("BUS-204")) {
                 afterOutage = payloads;
                 break;
@@ -134,37 +211,37 @@ class FleetSimulatorTest {
     }
 
     @Test
-    void longDwellHoldsOneVehicleStillWhileTheOthersKeepMoving() {
+    void longDwellHoldsOneVehicleAtTheTerminalWhileTheOthersRunTheirTrips() {
         FleetSimulator simulator = simulator(ScenarioType.LONG_DWELL);
-        double progressBefore = simulator.fleet().get(1).routeProgress();
 
-        IntStream.range(0, 30).forEach(tick -> simulator.tick(NOW));
+        run(simulator, 150);
 
         assertThat(simulator.fleet().get(1).speedKph()).isZero();
-        assertThat(simulator.fleet().get(1).routeProgress()).isEqualTo(progressBefore);
-        assertThat(simulator.fleet().get(2).routeProgress()).isNotEqualTo(progressBefore);
+        assertThat(simulator.fleet().get(1).routeProgress()).isZero();
+        assertThat(simulator.fleet().getFirst().routeProgress()).isGreaterThan(0.5);
     }
 
     @Test
     void lowBatteryScenarioStartsOneVehicleNearlyEmptyAndKeepsDraining() {
         FleetSimulator simulator = simulator(ScenarioType.EV_LOW_BATTERY);
 
-        List<TelemetryIngestPayload> payloads = simulator.tick(NOW);
+        List<TelemetryIngestPayload> payloads = simulator.tick(NINE_AM.plus(TICK));
         int startingBattery = payloadFor(payloads, "BUS-042").batteryPercent();
         assertThat(startingBattery).isLessThan(20);
         assertThat(payloadFor(payloads, "BUS-101").batteryPercent()).isGreaterThan(50);
 
-        IntStream.range(0, 200).forEach(tick -> simulator.tick(NOW));
+        run(simulator, 400);
 
         assertThat(simulator.fleet().getFirst().batteryPercent()).isLessThan(startingBattery);
         assertThat(simulator.fleet().getFirst().batteryPercent()).isGreaterThanOrEqualTo(1.0);
     }
 
     @Test
-    void multiIncidentCombinesDeviationDwellAndSilence() {
+    void multiIncidentCombinesDeviationHoldingAndSilence() {
         FleetSimulator simulator = simulator(ScenarioType.MULTI_INCIDENT);
 
-        List<TelemetryIngestPayload> payloads = simulator.tick(NOW);
+        // The first tick: BUS-204 is inside its silent window, which does not last the whole run.
+        List<TelemetryIngestPayload> payloads = simulator.tick(NINE_AM.plus(TICK));
 
         assertThat(distanceToShape(payloadFor(payloads, "BUS-042"))).isGreaterThan(100.0);
         assertThat(payloadFor(payloads, "BUS-101").speedKph()).isZero();
@@ -172,33 +249,33 @@ class FleetSimulatorTest {
     }
 
     @Test
-    void recoveryRunsSlowlyThenReturnsToNormalSpeed() {
+    void recoveryLosesGroundWhileDegradedAndMakesItUpAfterwards() {
         FleetSimulator simulator = simulator(ScenarioType.RECOVERY);
 
-        double degradedSpeed = simulator.tick(NOW).getFirst().speedKph();
+        // The degraded phase is the first sixty ticks; the vehicle cannot keep its timetable.
+        run(simulator, 60);
+        double afterDegradedPhase = simulator.fleet().getFirst().routeProgress();
 
-        List<TelemetryIngestPayload> recovered = null;
-        for (int tick = 0; tick < 200; tick++) {
-            List<TelemetryIngestPayload> payloads = simulator.tick(NOW);
-            if (!ScenarioProfile.isRecoveryDegradedPhase(simulator.tickNumber())) {
-                recovered = payloads;
-                break;
-            }
-        }
+        run(simulator, 60);
+        double afterRecovery = simulator.fleet().getFirst().routeProgress();
 
-        assertThat(recovered).isNotNull();
-        assertThat(recovered.getFirst().speedKph()).isGreaterThan(degradedSpeed);
+        assertThat(afterRecovery - afterDegradedPhase)
+                .as("with the degradation lifted it presses on to make up the lost ground")
+                .isGreaterThan(afterDegradedPhase);
     }
 
     private FleetSimulator simulator(ScenarioType scenario) {
         return new FleetSimulator(route, FLEET, scenario, TICK, 42L, "test-run");
     }
 
+    /** Runs the given number of ticks with the clock advancing by one tick each time. */
     private List<TelemetryIngestPayload> run(FleetSimulator simulator, int ticks) {
-        return IntStream.range(0, ticks)
-                .boxed()
-                .flatMap(tick -> simulator.tick(NOW).stream())
-                .toList();
+        List<TelemetryIngestPayload> payloads = new ArrayList<>();
+        long from = simulator.tickNumber();
+        for (long tick = from + 1; tick <= from + ticks; tick++) {
+            payloads.addAll(simulator.tick(NINE_AM.plus(TICK.multipliedBy(tick))));
+        }
+        return payloads;
     }
 
     private List<String> positionsOf(List<TelemetryIngestPayload> payloads) {
@@ -209,7 +286,7 @@ class FleetSimulatorTest {
     }
 
     private List<String> reportingVehicles(List<TelemetryIngestPayload> payloads) {
-        return payloads.stream().map(TelemetryIngestPayload::vehicleId).toList();
+        return payloads.stream().map(TelemetryIngestPayload::vehicleId).distinct().toList();
     }
 
     private TelemetryIngestPayload payloadFor(List<TelemetryIngestPayload> payloads, String vehicleId) {
@@ -219,28 +296,11 @@ class FleetSimulatorTest {
                 .orElseThrow(() -> new AssertionError("No payload for " + vehicleId));
     }
 
-    /** Forward distance, as a fraction of the shape, from a follower to a leader. */
-    private double gapBehind(SimulatedVehicle follower, SimulatedVehicle leader) {
-        double gap = leader.routeProgress() - follower.routeProgress();
-        return gap < 0 ? gap + 1.0 : gap;
-    }
-
-    /** The smallest gap between any two consecutive vehicles. */
-    private double tightestGap(FleetSimulator simulator) {
-        List<SimulatedVehicle> fleet = simulator.fleet();
-        double tightest = 1.0;
-        for (SimulatedVehicle follower : fleet) {
-            for (SimulatedVehicle leader : fleet) {
-                if (follower == leader) {
-                    continue;
-                }
-                double gap = gapBehind(follower, leader);
-                if (gap > 0) {
-                    tightest = Math.min(tightest, gap);
-                }
-            }
-        }
-        return tightest;
+    private TelemetryIngestPayload lastPayloadFor(List<TelemetryIngestPayload> payloads, String vehicleId) {
+        return payloads.reversed().stream()
+                .filter(payload -> payload.vehicleId().equals(vehicleId))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No payload for " + vehicleId));
     }
 
     /** Shortest distance from a reported position to the route shape, sampled along the line. */
@@ -251,5 +311,9 @@ class FleetSimulatorTest {
             closest = Math.min(closest, RoutePath.distanceMeters(reported, route.pointAt(progress)));
         }
         return closest;
+    }
+
+    private static org.assertj.core.data.Offset<Double> within(double tolerance) {
+        return org.assertj.core.data.Offset.offset(tolerance);
     }
 }

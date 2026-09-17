@@ -36,6 +36,23 @@ public final class RoutePath {
         }
     }
 
+    /**
+     * Where each vertex of the shape sits along it, as a fraction.
+     *
+     * <p>The seeded network places its stops on the shape's vertices, so these double as the stop
+     * positions. A network whose stops sat between vertices would need them supplied separately -
+     * this is a property of the seed, not a general truth, and is why the simulator says "vertex"
+     * rather than "stop" here.
+     */
+    public double[] vertexProgress() {
+        double[] fractions = new double[cumulativeMeters.length];
+        double length = lengthMeters();
+        for (int i = 0; i < cumulativeMeters.length; i++) {
+            fractions[i] = cumulativeMeters[i] / length;
+        }
+        return fractions;
+    }
+
     /** Total length of the shape in meters. */
     public double lengthMeters() {
         return cumulativeMeters[cumulativeMeters.length - 1];
