@@ -109,10 +109,13 @@ Verified successfully:
 - frontend dev proxy reaches the protected backend API
 - containerized frontend nginx proxies `/api` to backend successfully
 - stable Docker dashboard credentials work: `operator / metropulse-dev-password`
+- `.dockerignore` keeps Docker build contexts small; frontend image rebuilt successfully after the optimization
+- static schedule migrations apply through Flyway to schema version 4
+- development schedule seed creates 1 agency, 1 route, 5 stops, 1 trip, and 5 stop times
+- seeded route `M42` stores a 5-point PostGIS route geometry
 
 Current limitation:
 
-- Docker Desktop became unavailable after the latest `.dockerignore` change, so the `.dockerignore` optimization has not yet been Docker-rebuilt. Angular build still passes locally.
 - Maven is not installed on the host; Java verification has been done through Docker images when Docker is available.
 
 ## Recommended Phase Plan
