@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 
@@ -32,9 +32,14 @@ interface LatestVehicleTelemetry {
           <p class="eyebrow">MetroPulse</p>
           <h1>Transit Operations</h1>
         </div>
-        <button class="refresh-button" type="button" (click)="loadLatestTelemetry()" [disabled]="loading()">
-          {{ loading() ? 'Refreshing' : 'Refresh' }}
-        </button>
+        <div class="toolbar-actions">
+          <button class="mode-button" type="button" (click)="toggleAutoRefresh()" [class.mode-button--active]="autoRefresh()">
+            {{ autoRefresh() ? 'Auto on' : 'Auto off' }}
+          </button>
+          <button class="refresh-button" type="button" (click)="loadLatestTelemetry()" [disabled]="loading()">
+            {{ loading() ? 'Refreshing' : 'Refresh' }}
+          </button>
+        </div>
       </header>
 
       <section class="status-band" aria-label="Fleet summary">
@@ -53,6 +58,10 @@ interface LatestVehicleTelemetry {
         <div>
           <span>Last update</span>
           <strong>{{ lastUpdatedLabel() }}</strong>
+        </div>
+        <div>
+          <span>Auto refresh</span>
+          <strong>{{ autoRefresh() ? '10 sec' : 'Paused' }}</strong>
         </div>
       </section>
 
@@ -189,6 +198,7 @@ interface LatestVehicleTelemetry {
     }
 
     .refresh-button,
+    .mode-button,
     .connect-button {
       border: 0;
       background: #3fc4b4;
@@ -197,10 +207,28 @@ interface LatestVehicleTelemetry {
       cursor: pointer;
     }
 
-    .refresh-button {
+    .toolbar-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .refresh-button,
+    .mode-button {
       min-width: 112px;
       height: 42px;
       border-radius: 6px;
+    }
+
+    .mode-button {
+      border: 1px solid #304457;
+      background: #14202b;
+      color: #cfe1e8;
+    }
+
+    .mode-button--active {
+      border-color: #3fc4b4;
+      color: #91eadf;
     }
 
     .refresh-button:disabled {
@@ -210,7 +238,7 @@ interface LatestVehicleTelemetry {
 
     .status-band {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       border-top: 1px solid #233242;
       border-bottom: 1px solid #233242;
       background: #14202b;
@@ -405,17 +433,31 @@ interface LatestVehicleTelemetry {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .status-band div:nth-child(2) {
+      .status-band div {
+        border-bottom: 1px solid #233242;
+      }
+
+      .status-band div:nth-child(2n) {
         border-right: 0;
       }
 
-      .status-band div:nth-child(-n + 2) {
-        border-bottom: 1px solid #233242;
+      .status-band div:last-child {
+        grid-column: 1 / -1;
+        border-bottom: 0;
+      }
+
+      .toolbar-actions {
+        width: 100%;
+      }
+
+      .refresh-button,
+      .mode-button {
+        flex: 1;
       }
     }
   `]
 })
-export class DashboardComponent {
+export class DashboardComponent implements OnDestroy {
   private readonly http = inject(HttpClient);
 
   protected apiBase = sessionStorage.getItem('metropulse.apiBase') ?? '/api/v1';
@@ -426,6 +468,9 @@ export class DashboardComponent {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly lastUpdated = signal<Date | null>(null);
+  protected readonly autoRefresh = signal(sessionStorage.getItem('metropulse.autoRefresh') !== 'false');
+
+  private refreshTimer: number | undefined;
 
   protected readonly averageSpeed = computed(() => this.average((vehicle) => vehicle.speedKph));
   protected readonly averageOccupancy = computed(() => this.average((vehicle) => vehicle.occupancyEstimate));
@@ -436,6 +481,17 @@ export class DashboardComponent {
 
   constructor() {
     this.loadLatestTelemetry();
+    this.configureAutoRefresh();
+  }
+
+  ngOnDestroy(): void {
+    this.clearAutoRefresh();
+  }
+
+  protected toggleAutoRefresh(): void {
+    this.autoRefresh.update((enabled) => !enabled);
+    sessionStorage.setItem('metropulse.autoRefresh', String(this.autoRefresh()));
+    this.configureAutoRefresh();
   }
 
   protected saveAndLoad(): void {
@@ -446,6 +502,10 @@ export class DashboardComponent {
   }
 
   protected loadLatestTelemetry(): void {
+    if (this.loading()) {
+      return;
+    }
+
     this.loading.set(true);
     this.error.set(null);
 
@@ -466,6 +526,25 @@ export class DashboardComponent {
 
   protected trackVehicle(_index: number, vehicle: LatestVehicleTelemetry): string {
     return vehicle.vehicleId;
+  }
+
+  private configureAutoRefresh(): void {
+    this.clearAutoRefresh();
+
+    if (!this.autoRefresh()) {
+      return;
+    }
+
+    this.refreshTimer = window.setInterval(() => this.loadLatestTelemetry(), 10000);
+  }
+
+  private clearAutoRefresh(): void {
+    if (this.refreshTimer === undefined) {
+      return;
+    }
+
+    window.clearInterval(this.refreshTimer);
+    this.refreshTimer = undefined;
   }
 
   private authHeaders(): HttpHeaders {
