@@ -44,6 +44,35 @@ public class ScheduleQueryService {
                 ));
     }
 
+    /**
+     * Reads the vertices of a route's shape, in order.
+     *
+     * <p>{@code ST_DumpPoints} expands the LineString into its points, which is what a map needs to
+     * draw the route vehicles are projected onto. Returning the stored geometry rather than a
+     * decorative path matters: this is the same line PostGIS measures route progress and route
+     * deviation against.
+     */
+    public List<RouteGeometryPoint> findRouteGeometry(String routeCode) {
+        return jdbcTemplate.query("""
+                SELECT
+                    (point).path[1] AS sequence,
+                    ST_Y((point).geom) AS latitude,
+                    ST_X((point).geom) AS longitude
+                FROM (
+                    SELECT ST_DumpPoints(r.geometry) AS point
+                    FROM route r
+                    WHERE r.code = ?
+                ) AS points
+                ORDER BY sequence
+                """,
+                (rs, rowNum) -> new RouteGeometryPoint(
+                        rs.getInt("sequence"),
+                        rs.getBigDecimal("latitude"),
+                        rs.getBigDecimal("longitude")
+                ),
+                routeCode);
+    }
+
     public List<RouteStop> findRouteStops(String routeCode) {
         return jdbcTemplate.query("""
                 SELECT DISTINCT ON (s.id)

@@ -1,5 +1,6 @@
 package com.metropulse.schedule.api;
 
+import com.metropulse.schedule.read.RouteGeometryPoint;
 import com.metropulse.schedule.read.RouteStop;
 import com.metropulse.schedule.read.RouteSummary;
 import com.metropulse.schedule.read.ScheduleQueryService;
@@ -23,6 +24,11 @@ public class ScheduleController {
     @GetMapping
     public List<RouteSummary> routes() {
         return scheduleQueryService.findRoutes();
+    }
+
+    @GetMapping("/{code}/geometry")
+    public List<RouteGeometryPoint> routeGeometry(@PathVariable String code) {
+        return scheduleQueryService.findRouteGeometry(code);
     }
 
     @GetMapping("/{code}/stops")

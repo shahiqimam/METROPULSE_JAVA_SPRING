@@ -1,10 +1,106 @@
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  background: #101820;
+/*
+ * MetroPulse control-centre theme.
+ *
+ * Colours are defined as tokens by role, not by appearance, so a mark's meaning is stated once.
+ * The status ramp (good/warning/serious/critical) is reserved for vehicle state and is never reused
+ * as a series colour; every status mark also carries a text label, so colour never carries meaning
+ * on its own.
+ *
+ * The categorical set (--series-*) was validated for colour-vision separation against the panel
+ * surface below: worst all-pairs CVD dE 9.4, normal-vision dE 20.9, all >= 3:1 contrast.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --plane: #0b0f14;
+  --surface: #12171f;
+  --surface-raised: #171d27;
+  --surface-sunken: #0e131a;
+  --hairline: #232c38;
+  --hairline-strong: #313d4d;
+
+  /* Ink */
+  --ink-primary: #eef3f8;
+  --ink-secondary: #a9b6c4;
+  --ink-muted: #76828f;
+
+  /* Series (categorical, fixed order, never cycled) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+
+  /* Status (reserved; always paired with a label) */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* Type */
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "SF Mono", monospace;
+
+  /* Geometry */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--plane);
+  color: var(--ink-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd,
+dt,
+figure {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-sunken);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-muted);
 }

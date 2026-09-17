@@ -35,6 +35,12 @@ export interface RouteSummary {
   routePointCount: number;
 }
 
+export interface RouteGeometryPoint {
+  sequence: number;
+  latitude: number;
+  longitude: number;
+}
+
 export interface RouteStop {
   stopCode: string;
   stopName: string;
@@ -63,6 +69,18 @@ export class TelemetryApiService {
     return this.http.get<RouteSummary[]>(`${apiBase}/routes`, {
       headers: this.authHeaders(username, password)
     });
+  }
+
+  findRouteGeometry(
+    apiBase: string,
+    username: string,
+    password: string,
+    routeCode: string
+  ): Observable<RouteGeometryPoint[]> {
+    return this.http.get<RouteGeometryPoint[]>(
+      `${apiBase}/routes/${encodeURIComponent(routeCode)}/geometry`,
+      { headers: this.authHeaders(username, password) }
+    );
   }
 
   findRouteStops(apiBase: string, username: string, password: string, routeCode: string): Observable<RouteStop[]> {
