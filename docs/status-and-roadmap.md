@@ -48,8 +48,9 @@ What is built, what is verified, and what is not — kept honest rather than asp
 - JWT access tokens, rotating hashed refresh tokens, five roles, URL-based authorisation
 - WebSocket/STOMP broadcasts authenticated in the CONNECT frame, with REST as baseline and polling as
   fallback
-- Angular control centre: network map from stored PostGIS geometry, fleet list, headway panel, alerts
-  panel, login and route guard
+- GTFS-style import: parse, validate, activate in one transaction, administrator-only
+- Angular control centre with five screens: network (map, fleet, headway, alerts), incidents, EV,
+  analytics and playback, plus login and route guard
 - Simulator driving the seeded route geometry with eight reproducible scenarios and no overtaking
 - Development and production-style Compose stacks, nginx edge, Jenkins pipeline, smoke-test script
 - Maven Wrapper; 14 Flyway migrations
@@ -82,10 +83,8 @@ Everything below was run, not assumed.
 - **Punctuality and schedule deviation.** Needs stop-arrival detection, which needs the simulator to
   run scheduled trips rather than a continuous loop. `VEHICLE_LATE`, `VEHICLE_EARLY` and `LONG_DWELL`
   alerts depend on the same work. Analytics reports regularity instead, under its own name.
-- **GTFS-style import.** The schedule model exists and is seeded by migration; there is no upload,
-  validation or staged activation path.
-- **Playback, incident, EV and analytics screens.** The APIs exist; the dashboard shows vehicles,
-  headway and alerts only.
+- **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
+  preview a planner can review before switching over.
 - **Frontend tests.** None. The backend is well covered; the Angular app is not.
 - **Redis.** Running in both stacks and used by nothing. It was provisioned for caching and rule
   counters that PostgreSQL has handled adequately so far. Better to say so than to add a decorative

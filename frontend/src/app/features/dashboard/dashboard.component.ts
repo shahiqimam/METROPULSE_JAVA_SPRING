@@ -1,8 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
-import { AuthService, UserRole } from '../../core/auth/auth.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import {
   LatestVehicleTelemetry,
@@ -19,6 +18,7 @@ import { HeadwayPanelComponent } from './components/headway-panel.component';
 import { Metric, MetricBarComponent } from './components/metric-bar.component';
 import { NetworkMapComponent } from './components/network-map.component';
 import { RoutePanelComponent } from './components/route-panel.component';
+import { AppShellComponent } from '../../shared/app-shell.component';
 import { isLowBattery, isOffRoute } from './vehicle-status';
 
 const REFRESH_INTERVAL_MS = 5000;
@@ -35,6 +35,7 @@ const REFRESH_INTERVAL_MS = 5000;
   standalone: true,
   imports: [
     AlertsPanelComponent,
+    AppShellComponent,
     CommonModule,
     FleetPanelComponent,
     HeadwayPanelComponent,
@@ -43,27 +44,10 @@ const REFRESH_INTERVAL_MS = 5000;
     RoutePanelComponent
   ],
   template: `
-    <div class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand__mark" aria-hidden="true"></span>
-          <span class="brand__text">
-            <strong>MetroPulse</strong>
-            <small>Network Operations</small>
-          </span>
-        </div>
-
-        <div class="topbar__status">
-          <span class="live" [attr.data-state]="connectionState()">
-            <span class="live__dot"></span>{{ connectionLabel() }}
-          </span>
-          <span class="channel" [attr.data-state]="realtimeState()">
-            {{ realtimeState() === 'live' ? 'Streaming' : 'Polling' }}
-          </span>
+    <app-shell [showChannel]="true">
+      <div class="shell">
+        <div class="toolbar">
           <span class="clock">{{ lastUpdatedLabel() }}</span>
-        </div>
-
-        <div class="topbar__actions">
           <button
             type="button"
             class="ghost"
@@ -76,61 +60,55 @@ const REFRESH_INTERVAL_MS = 5000;
           <button type="button" class="ghost" (click)="refresh()" [disabled]="loading()">
             {{ loading() ? 'Refreshing…' : 'Refresh' }}
           </button>
-          <span class="operator" *ngIf="user() as operator">
-            <strong>{{ operator.displayName }}</strong>
-            <small>{{ roleLabel(operator.role) }}</small>
-          </span>
-          <button type="button" class="ghost" (click)="signOut()">Sign out</button>
         </div>
-      </header>
 
-      <div class="banner" *ngIf="error() as message" role="alert">
-        <span>{{ message }}</span>
-        <button type="button" (click)="refresh()">Retry</button>
-      </div>
+        <div class="banner" *ngIf="error() as message" role="alert">
+          <span>{{ message }}</span>
+          <button type="button" (click)="refresh()">Retry</button>
+        </div>
 
-      <app-metric-bar [metrics]="metrics()" />
+        <app-metric-bar [metrics]="metrics()" />
 
-      <main class="workspace">
-        <app-network-map
-          [routeCode]="selectedRouteCode()"
-          [geometry]="routeGeometry()"
-          [stops]="routeStops()"
-          [vehicles]="vehicles()"
-          [selectedVehicleId]="selectedVehicleId()"
-          [hoveredVehicleId]="hoveredVehicleId()"
-          (selected)="selectVehicle($event)"
-          (hovered)="hoveredVehicleId.set($event)"
-        />
-
-        <div class="sidebar">
-          <app-alerts-panel
-            [alerts]="alerts()"
-            [canAct]="canAct()"
-            (acknowledged)="acknowledgeAlert($event)"
-            (closed)="closeAlert($event)"
-          />
-          <app-headway-panel [snapshot]="headway()" />
-          <app-fleet-panel
+        <main class="workspace">
+          <app-network-map
+            [routeCode]="selectedRouteCode()"
+            [geometry]="routeGeometry()"
+            [stops]="routeStops()"
             [vehicles]="vehicles()"
             [selectedVehicleId]="selectedVehicleId()"
+            [hoveredVehicleId]="hoveredVehicleId()"
             (selected)="selectVehicle($event)"
             (hovered)="hoveredVehicleId.set($event)"
           />
-          <app-route-panel
-            [routes]="routes()"
-            [stops]="routeStops()"
-            [selectedRouteCode]="selectedRouteCode()"
-            (routeSelected)="selectRoute($event)"
-          />
-        </div>
-      </main>
 
-      <footer class="footnote">
-        Synthetic data. MetroPulse is not a real transit, dispatch or passenger-information system.
-      </footer>
-    </div>
+          <div class="sidebar">
+            <app-alerts-panel
+              [alerts]="alerts()"
+              [canAct]="canAct()"
+              (acknowledged)="acknowledgeAlert($event)"
+              (closed)="closeAlert($event)"
+            />
+            <app-headway-panel [snapshot]="headway()" />
+            <app-fleet-panel
+              [vehicles]="vehicles()"
+              [selectedVehicleId]="selectedVehicleId()"
+              (selected)="selectVehicle($event)"
+              (hovered)="hoveredVehicleId.set($event)"
+            />
+            <app-route-panel
+              [routes]="routes()"
+              [stops]="routeStops()"
+              [selectedRouteCode]="selectedRouteCode()"
+              (routeSelected)="selectRoute($event)"
+            />
+          </div>
+        </main>
 
+        <footer class="footnote">
+          Synthetic data. MetroPulse is not a real transit, dispatch or passenger-information system.
+        </footer>
+      </div>
+    </app-shell>
   `,
   styles: [`
     :host {
@@ -143,103 +121,18 @@ const REFRESH_INTERVAL_MS = 5000;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      min-height: 100vh;
+      min-height: calc(100vh - 62px);
       padding: 14px 18px 12px;
     }
 
-    .topbar {
+    .toolbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--hairline);
+      justify-content: flex-end;
+      gap: 8px;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-    }
-
-    .brand__mark {
-      width: 12px;
-      height: 26px;
-      border-radius: 3px;
-      background: linear-gradient(180deg, var(--series-1), var(--series-3));
-    }
-
-    .brand__text {
-      display: grid;
-    }
-
-    .brand__text strong {
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-
-    .brand__text small {
-      color: var(--ink-muted);
-      font-size: 11px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    .topbar__status {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-right: auto;
-      margin-left: 8px;
-    }
-
-    .live {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 4px 10px;
-      border: 1px solid var(--hairline-strong);
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .live__dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--ink-muted);
-    }
-
-    .live[data-state='live'] {
-      color: var(--status-good);
-      border-color: color-mix(in srgb, var(--status-good) 45%, transparent);
-    }
-
-    .live[data-state='live'] .live__dot {
-      background: var(--status-good);
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    .live[data-state='stale'] {
-      color: var(--status-warning);
-      border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
-    }
-
-    .live[data-state='stale'] .live__dot { background: var(--status-warning); }
-
-    .live[data-state='down'] {
-      color: var(--status-critical);
-      border-color: color-mix(in srgb, var(--status-critical) 45%, transparent);
-    }
-
-    .live[data-state='down'] .live__dot { background: var(--status-critical); }
-
-    @keyframes pulse {
+                                                        @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.35; }
     }
@@ -248,53 +141,14 @@ const REFRESH_INTERVAL_MS = 5000;
       .live[data-state='live'] .live__dot { animation: none; }
     }
 
-    .channel {
-      padding: 3px 8px;
-      border: 1px solid var(--hairline-strong);
-      border-radius: 999px;
-      color: var(--ink-muted);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .channel[data-state='live'] {
-      border-color: color-mix(in srgb, var(--series-1) 55%, transparent);
-      color: var(--series-1);
-    }
-
-    .clock {
+            .clock {
       color: var(--ink-muted);
       font-family: var(--font-mono);
       font-size: 12px;
       font-variant-numeric: tabular-nums;
     }
 
-    .topbar__actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .operator {
-      display: grid;
-      margin-right: 6px;
-      text-align: right;
-    }
-
-    .operator strong {
-      font-size: 13px;
-    }
-
-    .operator small {
-      color: var(--ink-muted);
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .ghost {
+                    .ghost {
       height: 34px;
       min-width: 92px;
       padding: 0 14px;
@@ -322,13 +176,7 @@ const REFRESH_INTERVAL_MS = 5000;
       border-color: color-mix(in srgb, var(--series-1) 55%, transparent);
     }
 
-    .ghost--icon {
-      min-width: 34px;
-      padding: 0;
-      font-size: 15px;
-    }
-
-    .banner {
+        .banner {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -404,10 +252,7 @@ export class DashboardComponent implements OnDestroy {
   private readonly telemetryApi = inject(TelemetryApiService);
   private readonly auth = inject(AuthService);
   private readonly realtime = inject(RealtimeService);
-  private readonly router = inject(Router);
 
-  protected readonly user = this.auth.user;
-  protected readonly realtimeState = this.realtime.state;
 
   /** Whether to show the controls that act on the network. The backend decides whether they work. */
   protected readonly canAct = computed(() => this.auth.canAct());
@@ -429,23 +274,7 @@ export class DashboardComponent implements OnDestroy {
 
   private refreshTimer: number | undefined;
 
-  protected readonly connectionState = computed(() => {
-    if (this.error()) {
-      return 'down';
-    }
-    return this.vehicles().some((vehicle) => vehicle.connectivityState === 'ONLINE') ? 'live' : 'stale';
-  });
 
-  protected readonly connectionLabel = computed(() => {
-    switch (this.connectionState()) {
-      case 'down':
-        return 'No data';
-      case 'stale':
-        return 'No fresh telemetry';
-      default:
-        return 'Live';
-    }
-  });
 
   protected readonly lastUpdatedLabel = computed(() => {
     const value = this.lastUpdated();
@@ -600,15 +429,7 @@ export class DashboardComponent implements OnDestroy {
     this.configureAutoRefresh();
   }
 
-  protected signOut(): void {
-    this.realtime.disconnect();
-    this.auth.logout();
-    this.router.navigate(['/login']);
-  }
 
-  protected roleLabel(role: UserRole): string {
-    return role.replace(/_/g, ' ').toLowerCase();
-  }
 
   protected selectVehicle(vehicleId: string): void {
     this.selectedVehicleId.update((current) => (current === vehicleId ? null : vehicleId));

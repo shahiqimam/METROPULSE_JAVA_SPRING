@@ -126,6 +126,10 @@ hysteresis so a vehicle sitting on a threshold cannot flap an alert on and off.
 bugs the tests caught: a revocation rolled back by the exception that triggered it, and a logout that
 signed the operator out everywhere.
 
+**[Schedule import](docs/schedule-import.md)** — validate everything then write everything, why times
+past midnight are not normalised, and why `split(",")` is wrong for a stop called "Union Square,
+North".
+
 **[Deployment](docs/deployment.md)** — including the nginx DNS trap that 502s every request after a
 backend restart, and how it was verified.
 
@@ -140,7 +144,10 @@ infra/       nginx edge and operational scripts
 ```
 
 Backend packages are organised by capability — `telemetry`, `operations`, `alert`, `incident`, `ev`,
-`playback`, `analytics`, `auth`, `realtime` — rather than by layer.
+`playback`, `analytics`, `auth`, `realtime`, `schedule` — rather than by layer.
+
+The control centre has five screens: **Network** (live map, fleet, headway, alerts), **Incidents**,
+**EV**, **Analytics** and **Playback**.
 
 ## What is not built
 
@@ -150,8 +157,6 @@ one with a short honest list:
 - **Punctuality.** Needs stop-arrival detection, which needs the simulator to run scheduled trips
   rather than a continuous loop. `VEHICLE_LATE`, `VEHICLE_EARLY` and `LONG_DWELL` alerts wait on the
   same thing. Analytics reports *regularity* instead, under its own name.
-- **GTFS import.** The schedule model exists and is seeded by migration; there is no upload path.
-- **Playback UI.** The API is there; the dashboard does not consume it yet.
 - **Retention.** The policy is documented; nothing prunes automatically.
 - **Horizontal scale.** One backend instance: two would contend on the outbox publisher and would
   each broadcast to only their own WebSocket subscribers.
