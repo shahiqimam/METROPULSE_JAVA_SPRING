@@ -48,10 +48,13 @@ Each type carries two windows:
 | `EXCESSIVE_GAP` | immediately | 60 s | MINOR |
 | `LOW_BATTERY` | 60 s | 120 s | MAJOR |
 | `OVER_CAPACITY` | 60 s | 60 s | MINOR |
+| `VEHICLE_LATE` | 60 s | 120 s | MINOR |
+| `VEHICLE_EARLY` | 60 s | 120 s | MINOR |
+| `LONG_DWELL` | immediately | 60 s | MINOR |
 
 "Immediately" means the condition already carries its own wait: a vehicle is only OFFLINE after 60
-seconds of silence, and a headway condition is only confirmed after 90. Requiring another window
-would double-count it.
+seconds of silence, a headway condition is only confirmed after 90, and a long dwell is itself a
+measurement of elapsed time. Requiring another window would double-count it.
 
 A condition that vanishes before maturing leaves no trace — the controller never sees it. A live
 alert whose condition stops is **not** closed at once: it enters recovery, and closes only if the
@@ -69,9 +72,30 @@ Opening and clearing use different thresholds, so a measurement sitting on a bou
 ROUTE_DEVIATION   opens above 100 m, clears below 60 m
 LOW_BATTERY       opens at or under 20%, clears above 30%
 OVER_CAPACITY     opens at 100% of capacity, clears below 90%
+VEHICLE_LATE      opens at 5 minutes late, clears below 3
+VEHICLE_EARLY     opens at 90 seconds early, clears below 45
+LONG_DWELL        opens at 3 minutes standing, clears below 2
 ```
 
+The late and early bands are deliberately asymmetric: five minutes late against ninety seconds early.
+A passenger who arrives on time for a bus that has already gone waits a full headway, while a late
+bus still turns up. Treating the two symmetrically would mean either tolerating early running that
+strands people or alerting constantly on lateness nobody minds.
+
 Rules are told which fingerprints already have a live alert so they can apply the wider band.
+
+## Lateness and dwell are different problems
+
+A vehicle three minutes late somewhere along its route is running badly. A vehicle that has been
+standing at a stop for three minutes is blocking it. They need different responses from a controller,
+so they are different alert types rather than one "delayed" type with a reason field.
+
+Both depend on stop arrivals being recorded: schedule deviation comes from the last call a vehicle
+made, and a dwell is an arrival that has not been closed by a departure. Neither can fire for a
+vehicle that does not report which trip it is running.
+
+A vehicle that goes silent while standing at a stop raises `TELEMETRY_OFFLINE`, not `LONG_DWELL`.
+Nothing has been heard from it; the stored dwell says where it was, not that it is still there.
 
 ## What a controller can do
 

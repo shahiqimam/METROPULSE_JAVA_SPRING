@@ -179,6 +179,23 @@ class HeadwayEvaluatorIntegrationTest extends PostgisIntegrationTest {
     }
 
     @Test
+    void vehiclesWaitingAtTheOriginAreLeftOutOfTheCalculation() {
+        // Two on the route, two sitting at the terminal between trips.
+        placeVehicle("BUS-042", 0.30, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-101", 0.60, SCHEDULED_SPEED_KPH);
+        placeVehicle("BUS-204", 0.00, 0.0);
+        placeVehicle("BUS-317", 0.00, 0.0);
+
+        assertThat(headwayEvaluator.evaluateRoute(route()))
+                .as("two vehicles at a terminal are not the most bunched pair on the route")
+                .isEmpty();
+
+        RouteHeadwaySnapshot snapshot = headwayQueryService.findRouteHeadway(ROUTE).orElseThrow();
+        assertThat(snapshot.vehiclesConsidered()).isEqualTo(2);
+        assertThat(snapshot.pairs()).hasSize(1);
+    }
+
+    @Test
     void vehiclesWithStaleTelemetryAreLeftOutOfTheCalculation() {
         bunchTwoVehicles();
         // Age both vehicles past the freshness cut-off.

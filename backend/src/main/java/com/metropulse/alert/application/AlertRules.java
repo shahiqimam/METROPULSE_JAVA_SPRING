@@ -49,6 +49,16 @@ public final class AlertRules {
     public static final int EARLY_OPEN_SECONDS = -90;
     public static final int EARLY_CLEAR_SECONDS = -45;
 
+    /**
+     * How long a vehicle may stand at a stop before it is worth someone looking.
+     *
+     * <p>The seeded timetable allows 30 seconds. Three minutes is long enough that a heavy boarding,
+     * a wheelchair ramp or a driver changeover has finished and something is actually wrong, and the
+     * alert clears at two so a vehicle pulling away does not leave it hanging.
+     */
+    public static final int LONG_DWELL_OPEN_SECONDS = 180;
+    public static final int LONG_DWELL_CLEAR_SECONDS = 120;
+
     private AlertRules() {
     }
 
@@ -69,6 +79,7 @@ public final class AlertRules {
             telemetryOffline(vehicle).ifPresent(signals::add);
             routeDeviation(vehicle, liveFingerprints).ifPresent(signals::add);
             scheduleAdherence(vehicle, liveFingerprints).forEach(signals::add);
+            longDwell(vehicle, liveFingerprints).ifPresent(signals::add);
             lowBattery(vehicle, liveFingerprints).ifPresent(signals::add);
             overCapacity(vehicle, liveFingerprints).ifPresent(signals::add);
         }
@@ -163,6 +174,42 @@ public final class AlertRules {
         }
 
         return signals;
+    }
+
+    /**
+     * A vehicle that has stopped at a stop and not moved on.
+     *
+     * <p>Distinct from lateness, and worth its own type: a vehicle three minutes late somewhere along
+     * the route is running badly, while one that has been standing at a stop for three minutes is
+     * blocking it, and the two call for different responses. The dwell is only known because arrivals
+     * are recorded and closed - without stop detection this rule has nothing to read.
+     */
+    private static java.util.Optional<AlertSignal> longDwell(
+            LatestVehicleTelemetry vehicle,
+            Set<String> liveFingerprints
+    ) {
+        if (vehicle.dwellSeconds() == null || vehicle.connectivityState() == ConnectivityState.OFFLINE) {
+            // Not standing at a stop, or not reporting. A vehicle that went silent while at a stop is
+            // an offline vehicle, not a long dwell: nothing has been heard from it either way.
+            return java.util.Optional.empty();
+        }
+
+        String fingerprint = AlertType.LONG_DWELL.name() + "|" + vehicle.vehicleId();
+        int threshold = liveFingerprints.contains(fingerprint)
+                ? LONG_DWELL_CLEAR_SECONDS
+                : LONG_DWELL_OPEN_SECONDS;
+
+        if (vehicle.dwellSeconds() < threshold) {
+            return java.util.Optional.empty();
+        }
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("dwellSeconds", vehicle.dwellSeconds());
+        details.put("stopName", vehicle.dwellingAtStopName());
+        details.put("tripCode", vehicle.tripCode());
+
+        return java.util.Optional.of(AlertSignal.forVehicle(
+                AlertType.LONG_DWELL, vehicle.vehicleId(), vehicle.routeCode(), details));
     }
 
     private static Map<String, Object> scheduleDetails(LatestVehicleTelemetry vehicle, int deviation) {

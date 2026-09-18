@@ -25,8 +25,15 @@ class FleetSimulatorTest {
     private static final List<String> FLEET = List.of("BUS-042", "BUS-101", "BUS-204", "BUS-317");
     private static final Duration TICK = Duration.ofSeconds(2);
 
-    /** 09:00 in the network's own timezone, in the middle of the seeded service day. */
-    private static final Instant NINE_AM = Instant.parse("2026-09-17T13:00:00Z");
+    /**
+     * 05:00 in the network's own timezone: the first departure of the seeded service day.
+     *
+     * <p>Starting here rather than at an arbitrary hour is what makes the fleet's state knowable. At
+     * any other moment each vehicle is somewhere different in its own block - which is the point of
+     * the blocks - and "the second vehicle has not left yet" would be a statement about the clock the
+     * test happened to pick.
+     */
+    private static final Instant SERVICE_START = Instant.parse("2026-09-17T09:00:00Z");
 
     /** The seeded pattern: 390 seconds from the first departure to the last arrival. */
     private static final int TRIP_SECONDS = 390;
@@ -56,7 +63,7 @@ class FleetSimulatorTest {
     void everyVehicleWaitsAtTheTerminalUntilItsOwnDepartureTime() {
         FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
 
-        // A minute in: the 09:00 departure has gone, the 09:02, 09:04 and 09:06 have not.
+        // A minute in: the 05:00 departure has gone, the 05:02, 05:04 and 05:06 have not.
         run(simulator, 30);
 
         assertThat(simulator.fleet().getFirst().routeProgress()).isGreaterThan(0.0);
@@ -87,7 +94,7 @@ class FleetSimulatorTest {
 
         List<Double> stationaryAt = new ArrayList<>();
         for (int tick = 0; tick < TRIP_TICKS + 5; tick++) {
-            simulator.tick(NINE_AM.plus(TICK.multipliedBy(tick + 1)));
+            simulator.tick(SERVICE_START.plus(TICK.multipliedBy(tick + 1)));
             SimulatedVehicle vehicle = simulator.fleet().getFirst();
             if (vehicle.speedKph() == 0.0) {
                 stationaryAt.add(vehicle.routeProgress());
@@ -127,7 +134,7 @@ class FleetSimulatorTest {
         run(simulator, 10);
         String firstTrip = simulator.fleet().getFirst().tripCode();
 
-        // Four vehicles two minutes apart come round again after eight minutes.
+        // A vehicle's own block comes round again after a full cycle of the fleet: eight minutes.
         run(simulator, 250);
 
         SimulatedVehicle vehicle = simulator.fleet().getFirst();
@@ -136,6 +143,27 @@ class FleetSimulatorTest {
         assertThat(vehicle.routeProgress())
                 .as("a new trip starts from the terminal, not from wherever the last one ended")
                 .isLessThan(0.5);
+    }
+
+    @Test
+    void everyVehicleCompletesItsTripBeforeBeingGivenAnother() {
+        FleetSimulator simulator = simulator(ScenarioType.NORMAL_OPERATION);
+
+        // Whether each vehicle ever reaches the far terminal, over more than a full cycle of the fleet.
+        List<String> reachedTheEnd = new ArrayList<>();
+        for (int tick = 1; tick <= 500; tick++) {
+            simulator.tick(SERVICE_START.plus(TICK.multipliedBy(tick)));
+            for (SimulatedVehicle vehicle : simulator.fleet()) {
+                if (vehicle.routeProgress() == 1.0 && !reachedTheEnd.contains(vehicle.vehicleId())) {
+                    reachedTheEnd.add(vehicle.vehicleId());
+                }
+            }
+        }
+
+        // Each vehicle's block is offset by its own place in the fleet. Without that they all change
+        // trip at the same instant, and the last one is handed a new departure while it is still part
+        // way through the previous run - so it never finishes one.
+        assertThat(reachedTheEnd).containsExactlyInAnyOrderElementsOf(FLEET);
     }
 
     @Test
@@ -194,12 +222,12 @@ class FleetSimulatorTest {
     void telemetryLossSilencesOneVehicleAndLaterRestoresIt() {
         FleetSimulator simulator = simulator(ScenarioType.TELEMETRY_LOSS);
 
-        List<TelemetryIngestPayload> duringOutage = simulator.tick(NINE_AM.plus(TICK));
+        List<TelemetryIngestPayload> duringOutage = simulator.tick(SERVICE_START.plus(TICK));
         assertThat(reportingVehicles(duringOutage)).doesNotContain("BUS-204").hasSize(3);
 
         List<TelemetryIngestPayload> afterOutage = null;
         for (int tick = 2; tick < 200; tick++) {
-            List<TelemetryIngestPayload> payloads = simulator.tick(NINE_AM.plus(TICK.multipliedBy(tick)));
+            List<TelemetryIngestPayload> payloads = simulator.tick(SERVICE_START.plus(TICK.multipliedBy(tick)));
             if (reportingVehicles(payloads).contains("BUS-204")) {
                 afterOutage = payloads;
                 break;
@@ -225,7 +253,7 @@ class FleetSimulatorTest {
     void lowBatteryScenarioStartsOneVehicleNearlyEmptyAndKeepsDraining() {
         FleetSimulator simulator = simulator(ScenarioType.EV_LOW_BATTERY);
 
-        List<TelemetryIngestPayload> payloads = simulator.tick(NINE_AM.plus(TICK));
+        List<TelemetryIngestPayload> payloads = simulator.tick(SERVICE_START.plus(TICK));
         int startingBattery = payloadFor(payloads, "BUS-042").batteryPercent();
         assertThat(startingBattery).isLessThan(20);
         assertThat(payloadFor(payloads, "BUS-101").batteryPercent()).isGreaterThan(50);
@@ -241,7 +269,7 @@ class FleetSimulatorTest {
         FleetSimulator simulator = simulator(ScenarioType.MULTI_INCIDENT);
 
         // The first tick: BUS-204 is inside its silent window, which does not last the whole run.
-        List<TelemetryIngestPayload> payloads = simulator.tick(NINE_AM.plus(TICK));
+        List<TelemetryIngestPayload> payloads = simulator.tick(SERVICE_START.plus(TICK));
 
         assertThat(distanceToShape(payloadFor(payloads, "BUS-042"))).isGreaterThan(100.0);
         assertThat(payloadFor(payloads, "BUS-101").speedKph()).isZero();
@@ -273,7 +301,7 @@ class FleetSimulatorTest {
         List<TelemetryIngestPayload> payloads = new ArrayList<>();
         long from = simulator.tickNumber();
         for (long tick = from + 1; tick <= from + ticks; tick++) {
-            payloads.addAll(simulator.tick(NINE_AM.plus(TICK.multipliedBy(tick))));
+            payloads.addAll(simulator.tick(SERVICE_START.plus(TICK.multipliedBy(tick))));
         }
         return payloads;
     }

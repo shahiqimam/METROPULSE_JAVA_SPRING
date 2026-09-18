@@ -98,7 +98,7 @@ npm --prefix frontend run build
 
 `mvnw` downloads Maven itself — only Java 21+ is required.
 
-**290 tests** — 261 backend and simulator, 29 frontend. Threshold and rule logic as unit tests;
+**325 tests** — 296 backend and simulator, 29 frontend. Threshold and rule logic as unit tests;
 migrations, PostGIS behaviour, the Kafka consumer, charger concurrency, authentication, schedule
 import and the WebSocket as integration tests against real infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
 projection depends on. See [testing.md](docs/testing.md).
@@ -115,7 +115,12 @@ transaction as the work it triggers, so redelivery is a no-op rather than a seco
 state must not move backwards. One `WHERE` clause on the upsert's conflict branch.
 
 **[Headway and bunching](docs/headway-bunching.md)** — measuring spacing from route progress, why a
-stopped vehicle needs a different speed basis, and why every rule has a persistence window.
+stopped vehicle needs a different speed basis, why the route's target headway is not its departure
+interval, and why every rule has a persistence window.
+
+**[Schedule adherence](docs/operational-state.md)** — detecting a call at a stop from proximity plus
+low speed, why deviation is never interpolated between stops, and why a trip's origin is measured on
+departure rather than arrival.
 
 **[Alerts](docs/alerts.md)** — fingerprint deduplication enforced by a partial unique index, and
 hysteresis so a vehicle sitting on a threshold cannot flap an alert on and off.
@@ -155,15 +160,17 @@ The control centre has five screens: **Network** (live map, fleet, headway, aler
 Written down rather than implied, because a portfolio project that overstates itself is worse than
 one with a short honest list:
 
-- **Punctuality.** Needs stop-arrival detection, which needs the simulator to run scheduled trips
-  rather than a continuous loop. `VEHICLE_LATE`, `VEHICLE_EARLY` and `LONG_DWELL` alerts wait on the
-  same thing. Analytics reports *regularity* instead, under its own name.
+- **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
+  preview a planner can review before switching over.
+- **Screenshots and diagrams.** The docs describe the system in prose; there are no images.
 - **Retention.** The policy is documented; nothing prunes automatically.
 - **Horizontal scale.** One backend instance: two would contend on the outbox publisher and would
   each broadcast to only their own WebSocket subscribers.
 - **TLS**, log aggregation, and platform metrics.
 
-Known limitations are listed at the end of each doc.
+Known limitations are listed at the end of each doc, and
+[status-and-roadmap.md](docs/status-and-roadmap.md) keeps a list of the defects that a green test
+suite missed and only live running caught.
 
 ## Stack
 

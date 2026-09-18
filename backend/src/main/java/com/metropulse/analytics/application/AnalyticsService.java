@@ -7,8 +7,8 @@ import com.metropulse.analytics.domain.ServiceRegularityAnalytics;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -32,9 +32,11 @@ import java.util.Map;
 public class AnalyticsService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final Clock clock;
 
-    public AnalyticsService(JdbcTemplate jdbcTemplate) {
+    public AnalyticsService(JdbcTemplate jdbcTemplate, Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
+        this.clock = clock;
     }
 
     /**
@@ -231,7 +233,17 @@ public class AnalyticsService {
                 since(window));
     }
 
+    /**
+     * The start of the window, taken from the application clock rather than the wall clock.
+     *
+     * <p>Every other component that reasons about time here takes the injected {@code Clock}; this
+     * one read {@code Instant.now()} directly, which meant its window was anchored to real time while
+     * the history it measured was written at the clock's time. In production the two agree. Under a
+     * fixed test clock they drift apart by however long real time has moved on, so the same assertions
+     * passed or failed depending on the date they were run - and a metric that disagrees with the
+     * clock the rest of the system keeps is wrong in exactly the way that is hardest to notice.
+     */
     private OffsetDateTime since(Duration window) {
-        return OffsetDateTime.ofInstant(Instant.now().minus(window), ZoneOffset.UTC);
+        return OffsetDateTime.ofInstant(clock.instant().minus(window), ZoneOffset.UTC);
     }
 }

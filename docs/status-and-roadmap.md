@@ -21,16 +21,20 @@ What is built, what is verified, and what is not — kept honest rather than asp
 - No-rewind rule: a late event is stored historically but never moves current state backwards
 - PostGIS route progress (`ST_LineLocatePoint`) and deviation in meters (`ST_Distance` on geography)
 - Connectivity (ONLINE/STALE/OFFLINE) derived at read time from telemetry age
-- Headway between consecutive vehicles, with a documented reference-speed fallback for stopped
-  vehicles
+- Headway between consecutive vehicles, open-ended along the route, with a documented
+  reference-speed fallback for stopped vehicles
 - Bunching and excessive-gap rules with a 90-second persistence window, confirmation and recovery
+- Stop-arrival detection: proximity plus low speed against the trip's own stop times, one call per
+  trip and stop, with dwell closed on departure
+- Schedule deviation per vehicle, carried forward from the last call rather than interpolated;
+  measured against planned departure at a trip's origin
 
 ### Alerts and incidents
 
 - Alert engine with fingerprint deduplication (partial unique index), per-type persistence and
   recovery windows, and hysteresis on deviation, battery and capacity
-- Six alert types: telemetry offline, route deviation, bunching, excessive gap, low battery, over
-  capacity
+- Nine alert types: telemetry offline, route deviation, bunching, excessive gap, low battery, over
+  capacity, running late, running early, long dwell
 - Acknowledge and close, with status never settable directly through the API
 - Incident workflow with a single transition table, append-only timeline, and actor taken from the
   authenticated principal
@@ -41,7 +45,8 @@ What is built, what is verified, and what is not — kept honest rather than asp
 - Charger reservation under `SELECT ... FOR UPDATE`, with unique partial indexes as the database's
   own statement of the rule
 - Playback over immutable history, writing nothing operational
-- Analytics: service regularity, alert counts by type, incident timings, EV and battery state
+- Analytics: punctuality, service regularity, alert counts by type, incident timings, EV and battery
+  state
 
 ### Platform
 
@@ -50,16 +55,17 @@ What is built, what is verified, and what is not — kept honest rather than asp
   fallback
 - GTFS-style import: parse, validate, activate in one transaction, administrator-only
 - Angular control centre with five screens: network (map, fleet, headway, alerts), incidents, EV,
-  analytics and playback, plus login and route guard
-- Simulator driving the seeded route geometry with eight reproducible scenarios and no overtaking
+  analytics (punctuality and regularity) and playback, plus login and route guard
+- Simulator running scheduled trips on the seeded geometry, at the speed the timetable implies, with
+  eight reproducible scenarios and no overtaking
 - Development and production-style Compose stacks, nginx edge, Jenkins pipeline, smoke-test script
-- Maven Wrapper; 14 Flyway migrations
+- Maven Wrapper; 16 Flyway migrations
 
 ## Verified
 
 Everything below was run, not assumed.
 
-- `./mvnw clean verify` → BUILD SUCCESS: **240 backend + 21 simulator tests**
+- `./mvnw clean verify` → BUILD SUCCESS: **271 backend + 25 simulator tests**
 - `npm run test` → **29 frontend tests**, headless Chrome
 - Integration tests run the full migration set against real PostgreSQL/PostGIS
 - Kafka consumer, redelivery and dead-lettering exercised against an in-process broker
@@ -70,6 +76,14 @@ Everything below was run, not assumed.
   requested 180 m offset
 - `BUNCHING` produces a real pack: a vehicle queued 12 m behind its leader classified BUNCHING, a
   1005 m hole classified EXCESSIVE_GAP, both sustained past the persistence window
+- Stop arrivals recorded live from simulated telemetry at all five stops of the pattern, with dwells
+  matching the seeded 30-second stop times and deviations of +2 to +5 seconds once the fleet settles
+- `/analytics/punctuality` from that history: 12 calls measured, 100% on time
+- Live headway of 76-91 seconds against the route's 83-second target, measured by the backend from
+  positions the simulator never labelled - the closest thing to an independent check that the
+  timetable, the simulator and the headway model agree
+- `LONG_DWELL`, `VEHICLE_EARLY` and `BUNCHING` raised from real movement during the fleet's startup
+  transient, then closed as RECOVERED once the service settled
 - `TELEMETRY_LOSS` drives a vehicle to OFFLINE at 62 s while the rest stay ONLINE
 - Alerts raised, acknowledged and closed through the API; a second close returns 409
 - Incident workflow end to end, including a refused MITIGATING → CANCELLED transition
@@ -81,9 +95,6 @@ Everything below was run, not assumed.
 
 ## Not built
 
-- **Punctuality and schedule deviation.** Needs stop-arrival detection, which needs the simulator to
-  run scheduled trips rather than a continuous loop. `VEHICLE_LATE`, `VEHICLE_EARLY` and `LONG_DWELL`
-  alerts depend on the same work. Analytics reports regularity instead, under its own name.
 - **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
   preview a planner can review before switching over.
 - **Frontend component tests.** The status rules, session service and HTTP interceptor are covered;
@@ -107,9 +118,24 @@ not.
 
 ## Next
 
-1. Trip-aware simulator movement, then stop-arrival detection — unblocks punctuality and three alert
-   types.
-2. GTFS import with staged activation.
-3. Playback and analytics screens.
-4. Outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on
-   recovery.
+1. GTFS import with staged activation.
+2. Outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on recovery.
+3. Screenshots and diagrams for the README.
+4. Component tests for the Angular screens.
+
+## What live running caught that the tests did not
+
+Kept because the pattern is the point: each of these passed a green suite and was wrong anyway.
+
+- Vehicles never called at stops, because the simulator drove past them. Arrival detection was
+  correct and had nothing to detect.
+- The seeded timetable allowed 30 minutes for a 1,459 m route. Nothing had ever had to run it, so
+  nothing had ever disagreed with it.
+- Treating the route as a loop paired the vehicle approaching the far terminal with one sitting at
+  the near one and called it severe bunching.
+- Measuring a trip's origin as an arrival made every departure read as early running, because a
+  vehicle waiting at its terminal has "arrived" whenever it pulled in.
+- Vehicles laying over at a terminal appeared in the headway calculation as pairs metres apart.
+- `AnalyticsService` read the wall clock while its tests wrote history at a fixed one. The suite
+  passed for as long as the two stayed within 24 hours of each other, then began failing on a date
+  rather than a change.

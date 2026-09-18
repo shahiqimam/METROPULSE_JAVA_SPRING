@@ -119,6 +119,7 @@ public class HeadwayQueryService {
                 JOIN vehicle v ON v.id = vcs.vehicle_id
                 WHERE vcs.route_id = ?
                   AND vcs.route_progress IS NOT NULL
+                  AND vcs.route_progress > 0
                   AND EXTRACT(EPOCH FROM (now() - vcs.recorded_at)) <= ?
                 """,
                 (rs, rowNum) -> new HeadwayCalculator.VehiclePosition(

@@ -37,13 +37,23 @@ public record TripSchedule(String tripCode, int departureSeconds, int durationSe
     public static TripSchedule forVehicle(int vehicleIndex, int fleetSize, Instant now) {
         int serviceSeconds = serviceDaySeconds(now);
 
-        // A vehicle keeps one departure for the whole of that trip and then takes the fleet's next
-        // one round, which is how a real block works. Reassigning it to whichever trip happened to
-        // be departing would make deviation meaningless: a vehicle halfway along the shape would
-        // suddenly be measured against a trip that had not left the terminal yet.
-        int elapsed = Math.max(0, serviceSeconds - FIRST_DEPARTURE_SECONDS);
+        // A vehicle keeps one departure for the whole of that trip and then takes the fleet's next one
+        // round, which is how a real block works. Reassigning it to whichever trip happened to be
+        // departing would make deviation meaningless: a vehicle halfway along the shape would suddenly
+        // be measured against a trip that had not left the terminal yet.
+        //
+        // Each vehicle's cycle is offset by its own place in the fleet, so it takes a trip at the
+        // moment that trip departs. Without the offset every vehicle changes trip at the same instant:
+        // the first one is handed its next departure just as it finishes, but the last is handed one
+        // while it is still two minutes into a six-minute run, and it never completes a trip at all.
+        int elapsed = serviceSeconds - FIRST_DEPARTURE_SECONDS;
+        int ownOffset = vehicleIndex * HEADWAY_SECONDS;
         int cycleSeconds = HEADWAY_SECONDS * fleetSize;
-        int departureIndex = elapsed / cycleSeconds * fleetSize + vehicleIndex;
+
+        int departureIndex = vehicleIndex;
+        if (elapsed >= ownOffset) {
+            departureIndex = (elapsed - ownOffset) / cycleSeconds * fleetSize + vehicleIndex;
+        }
 
         int departure = FIRST_DEPARTURE_SECONDS + departureIndex * HEADWAY_SECONDS;
         if (departure > LAST_DEPARTURE_SECONDS) {

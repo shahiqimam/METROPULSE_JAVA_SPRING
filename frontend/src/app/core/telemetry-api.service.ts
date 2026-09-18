@@ -181,6 +181,18 @@ export interface ChargingSession {
   startedBy: string;
 }
 
+export interface Punctuality {
+  routeCode: string;
+  measuredCalls: number;
+  onTime: number;
+  late: number;
+  early: number;
+  onTimePercent: number;
+  averageDeviationSeconds: number;
+  worstLateSeconds: number;
+  worstEarlySeconds: number;
+}
+
 export interface ServiceRegularity {
   routeCode: string;
   targetHeadwaySeconds: number;
@@ -310,6 +322,10 @@ export class TelemetryApiService {
   }
 
   // Analytics
+
+  findPunctuality(windowHours = 24): Observable<Punctuality[]> {
+    return this.http.get<Punctuality[]>(`${this.apiBase}/analytics/punctuality?windowHours=${windowHours}`);
+  }
 
   findServiceRegularity(windowHours = 24): Observable<ServiceRegularity[]> {
     return this.http.get<ServiceRegularity[]>(`${this.apiBase}/analytics/service-regularity?windowHours=${windowHours}`);

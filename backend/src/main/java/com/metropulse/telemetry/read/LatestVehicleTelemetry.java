@@ -33,6 +33,10 @@ public record LatestVehicleTelemetry(
         /** Positive is late, negative is early, null when the vehicle has not yet called at a stop. */
         Integer scheduleDeviationSeconds,
         String nextStopName,
+        /** The stop the vehicle is standing at right now, or null when it is not at one. */
+        String dwellingAtStopName,
+        /** How long it has been standing there, in seconds; null when it is not standing anywhere. */
+        Integer dwellSeconds,
         double telemetryAgeSeconds,
         ConnectivityState connectivityState
 ) {

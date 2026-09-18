@@ -41,6 +41,9 @@ import java.util.List;
  * <p>Actual arrival minus planned arrival, in seconds, positive for late. Both are expressed in
  * service-day seconds, so a trip that runs past midnight is compared against the day it belongs to
  * rather than the calendar date it happens on.
+ *
+ * <p>The first stop of a trip is the exception: there, deviation is measured against the planned
+ * departure instead. See {@link #measureOriginAgainstDeparture}.
  */
 @Component
 public class StopArrivalDetector {
@@ -76,6 +79,7 @@ public class StopArrivalDetector {
         int observedSeconds = local.getHour() * 3600 + local.getMinute() * 60 + local.getSecond();
 
         recordArrivalIfAtStop(observation, tripRowId, vehicleRowId, serviceDate, observedSeconds);
+        measureOriginAgainstDeparture(tripRowId, serviceDate, observedSeconds);
         recordDepartureIfLeft(observation, tripRowId, serviceDate);
 
         return currentAdherence(tripRowId, vehicleRowId, serviceDate, observedSeconds);
@@ -144,6 +148,36 @@ public class StopArrivalDetector {
             // Two observations inside the radius in the same instant; the first one wins.
             log.trace("Duplicate stop arrival ignored for trip {}.", tripRowId);
         }
+    }
+
+    /**
+     * At the origin, punctuality is a departure measure rather than an arrival one.
+     *
+     * <p>A vehicle waiting at its terminal for a departure has "arrived" there whenever it happened
+     * to pull in, which says nothing about the trip. Measured as an arrival it reads early by however
+     * long the layover was - and since every trip starts with one, the route's punctuality would
+     * report constant early running and raise a VEHICLE_EARLY alert on each departure. What matters
+     * at an origin is whether the trip left on time.
+     *
+     * <p>So the origin's deviation is how late the departure is, recomputed while the vehicle stands
+     * there: zero until its planned departure passes, then growing for as long as it has not moved.
+     * The figure settles when the dwell closes.
+     */
+    private void measureOriginAgainstDeparture(Long tripRowId, LocalDate serviceDate, int observedSeconds) {
+        jdbcTemplate.update("""
+                UPDATE stop_arrival sa
+                SET deviation_seconds = GREATEST(0, ? - st.planned_departure_seconds)
+                FROM stop_time st
+                WHERE st.trip_id = sa.trip_id
+                  AND st.stop_id = sa.stop_id
+                  AND sa.trip_id = ?
+                  AND sa.service_date = CAST(? AS date)
+                  AND sa.stop_sequence = 1
+                  AND sa.departed_at IS NULL
+                """,
+                observedSeconds,
+                tripRowId,
+                serviceDate);
     }
 
     /**

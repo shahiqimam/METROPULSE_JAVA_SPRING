@@ -231,6 +231,66 @@ class AlertRulesTest {
                 confirmed);
     }
 
+    @Test
+    void aVehicleStandingAtAStopTooLongRaisesALongDwell() {
+        List<AlertSignal> signals = AlertRules.evaluate(
+                List.of(vehicle().dwellSeconds(AlertRules.LONG_DWELL_OPEN_SECONDS).build()),
+                List.of(),
+                Set.of());
+
+        assertThat(signals).extracting(AlertSignal::type).contains(AlertType.LONG_DWELL);
+    }
+
+    @Test
+    void anOrdinaryDwellRaisesNothing() {
+        // The seeded timetable allows thirty seconds at a stop.
+        List<AlertSignal> signals = AlertRules.evaluate(
+                List.of(vehicle().dwellSeconds(30).build()), List.of(), Set.of());
+
+        assertThat(signals).extracting(AlertSignal::type).doesNotContain(AlertType.LONG_DWELL);
+    }
+
+    @Test
+    void aVehicleThatIsNotAtAStopCannotBeDwellingTooLong() {
+        List<AlertSignal> signals = AlertRules.evaluate(
+                List.of(vehicle().dwellSeconds(null).build()), List.of(), Set.of());
+
+        assertThat(signals).extracting(AlertSignal::type).doesNotContain(AlertType.LONG_DWELL);
+    }
+
+    @Test
+    void aLongDwellStaysOpenUntilItFallsBackBelowTheClearBand() {
+        Set<String> live = Set.of(AlertType.LONG_DWELL.name() + "|BUS-042");
+        int betweenTheBands = AlertRules.LONG_DWELL_CLEAR_SECONDS + 1;
+
+        // Hysteresis: once open it holds at a dwell that would not have opened it.
+        assertThat(AlertRules.evaluate(
+                List.of(vehicle().dwellSeconds(betweenTheBands).build()), List.of(), live))
+                .extracting(AlertSignal::type).contains(AlertType.LONG_DWELL);
+
+        assertThat(AlertRules.evaluate(
+                List.of(vehicle().dwellSeconds(AlertRules.LONG_DWELL_CLEAR_SECONDS - 1).build()),
+                List.of(), live))
+                .extracting(AlertSignal::type).doesNotContain(AlertType.LONG_DWELL);
+    }
+
+    @Test
+    void aVehicleThatWentSilentAtAStopIsReportedOfflineRatherThanDwelling() {
+        List<AlertSignal> signals = AlertRules.evaluate(
+                List.of(vehicle()
+                        .connectivity(ConnectivityState.OFFLINE)
+                        .telemetryAgeSeconds(300)
+                        .dwellSeconds(600)
+                        .build()),
+                List.of(),
+                Set.of());
+
+        // Nothing has been heard from it. The stored dwell says where it was, not that it is there.
+        assertThat(signals).extracting(AlertSignal::type)
+                .contains(AlertType.TELEMETRY_OFFLINE)
+                .doesNotContain(AlertType.LONG_DWELL);
+    }
+
     private VehicleBuilder vehicle() {
         return new VehicleBuilder();
     }
@@ -244,6 +304,8 @@ class AlertRulesTest {
         private int occupancy = 20;
         private int capacity = 80;
         private Integer scheduleDeviationSeconds = 0;
+        private Integer dwellSeconds = null;
+        private String dwellingAtStopName = null;
 
         VehicleBuilder connectivity(ConnectivityState connectivity) {
             this.connectivity = connectivity;
@@ -280,6 +342,13 @@ class AlertRulesTest {
             return this;
         }
 
+        /** Standing at a stop; null is a vehicle that is not at one. */
+        VehicleBuilder dwellSeconds(Integer dwellSeconds) {
+            this.dwellSeconds = dwellSeconds;
+            this.dwellingAtStopName = dwellSeconds == null ? null : "Central Library";
+            return this;
+        }
+
         LatestVehicleTelemetry build() {
             return new LatestVehicleTelemetry(
                     "BUS-042",
@@ -302,6 +371,8 @@ class AlertRulesTest {
                     "M42-WKD-0700-EAST",
                     scheduleDeviationSeconds,
                     "Central Library",
+                    dwellingAtStopName,
+                    dwellSeconds,
                     telemetryAgeSeconds,
                     connectivity);
         }

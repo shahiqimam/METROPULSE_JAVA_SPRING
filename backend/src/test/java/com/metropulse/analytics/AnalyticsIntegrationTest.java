@@ -116,9 +116,13 @@ class AnalyticsIntegrationTest extends PostgisIntegrationTest {
     @Test
     void incidentsOutsideTheWindowAreNotCounted() {
         openIncident();
+        assertThat(analyticsService.incidents(Duration.ofMinutes(5)).total()).isEqualTo(1);
 
-        assertThat(analyticsService.incidents(Duration.ofSeconds(1)).total())
-                .as("the incident was opened at the clock's start, well outside a one-second window")
+        // Time moves on; the incident falls out of the back of a short window.
+        clock.advance(Duration.ofMinutes(10));
+
+        assertThat(analyticsService.incidents(Duration.ofMinutes(5)).total())
+                .as("opened ten minutes ago, asked for the last five")
                 .isZero();
     }
 

@@ -14,9 +14,29 @@ its headway is the time to cover the gap between them:
 gap along the shape (meters) / a speed (m/s)
 ```
 
-The route is treated as a loop: the last vehicle's leader is the first, wrapping past the end of the
-shape. That suits the simulator, which runs the shape continuously. A scheduled service running
-discrete trips would want the open-ended form, where the vehicle in front has no follower.
+The route is open-ended: a trip runs from one terminal to the other, so the vehicle at the front has
+nothing ahead of it and produces no pair. Four vehicles give three headways, not four.
+
+This was originally the other way round. While the simulator circled the shape continuously, the
+last vehicle's leader was the first, wrapping past the end — and that was the right model for what
+was being simulated. Once vehicles began running scheduled trips it stopped being right, because the
+wrap pairs the vehicle approaching the far terminal with whichever one is sitting at the near one
+between trips: a kilometre and a half apart, one of them not yet in service, reported as severe
+bunching. The loop form is correct for a genuinely circular route and would have to come back for
+one; it is not correct for a route with two ends.
+
+### The target is not the departure interval
+
+The seeded M42 runs a departure every 120 seconds, and its `target_headway_seconds` is 83. The
+difference is the dwell. This calculation divides a distance by the speed the follower is driving,
+which is the speed it covers ground at *between* stops — it knows nothing about the 30 seconds it
+will spend standing at each one. Two vehicles running two minutes apart to the seeded timetable are
+449 m apart, and 449 m at the pattern's driving speed of 5.4 m/s reads as 83 seconds.
+
+So the target is stated in the same terms the measurement is made in. Comparing a measurement that
+excludes dwell against a target that includes it would report every correctly-spaced service on the
+route as bunched — and the honest fix is to make the two comparable, not to widen the band until the
+false alarms stop.
 
 **This is an estimate.** It assumes distance along the shape is distance travelled, and that the
 speed used holds for the whole gap. It is not the same thing as measuring the time between two

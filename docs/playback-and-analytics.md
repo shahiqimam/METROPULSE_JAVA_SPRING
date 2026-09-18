@@ -34,6 +34,7 @@ through one GET.
 ## Analytics
 
 ```text
+GET /api/v1/analytics/punctuality?windowHours=24
 GET /api/v1/analytics/service-regularity?windowHours=24
 GET /api/v1/analytics/alerts?windowHours=24
 GET /api/v1/analytics/incidents?windowHours=24
@@ -42,25 +43,30 @@ GET /api/v1/analytics/ev?windowHours=24
 
 Every endpoint takes a window, because a metric without a period is not a metric.
 
-### Why there is no punctuality endpoint
+### Punctuality and regularity are different questions
 
-The project brief asks for `/analytics/punctuality`. It is deliberately absent.
+They are reported separately, under their own names, rather than blended into one score.
 
-Punctuality means comparing **actual** arrivals against **scheduled** ones. MetroPulse stores the
-schedule, and it stores telemetry, but it does not detect arrivals at stops — so there is no actual
-arrival time to compare against. Any number produced from what is available (route progress against
-elapsed time, for instance) would be a different measurement wearing a word that means something
-specific in transit.
+**Punctuality** asks whether the service ran to its timetable: recorded stop arrivals, actual against
+planned. **Regularity** asks whether it ran evenly spaced, from headway conditions. A frequent
+service can be perfectly regular and consistently late, or punctual on average while bunching badly,
+so a single combined number would answer neither question.
 
-What the data does support is **regularity**: whether the service is evenly spaced. That is reported
-under its own name at `/analytics/service-regularity`, built from headway conditions and the alerts
-they raised.
+For most of this project's life there was no punctuality endpoint at all, and the reason is worth
+keeping: comparing actual against scheduled arrivals needs actual arrivals, and until stop-arrival
+detection existed there was nothing to compare. Any figure derived from what was available — route
+progress against elapsed time, say — would have been a different measurement wearing a word that
+means something specific in transit. The endpoint appeared when the data behind it did, not before.
 
-Punctuality becomes possible once stop-arrival detection exists, which in turn needs the simulator to
-run scheduled trips rather than a continuous loop. Both are recorded as not built.
+The on-time window is 90 seconds early to 5 minutes late. Asymmetric, because passengers experience
+the two differently: a late bus still turns up, an early one has gone.
 
 ### What each endpoint measures
 
+- **punctuality** — per route: calls measured, how many were on time, late and early, the share on
+  time, average deviation, and the worst in each direction. A call that was never detected is not
+  counted, which understates how many calls were made rather than overstating how punctual they
+  were.
 - **service-regularity** — per route: target headway, conditions live now, and bunching/gap alerts
   raised in the window with their average duration. A route with nothing wrong still appears, because
   "M42 ran within target all day" is the useful thing to be able to say.

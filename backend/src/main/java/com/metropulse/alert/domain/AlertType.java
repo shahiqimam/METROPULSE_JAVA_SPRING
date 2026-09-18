@@ -40,7 +40,15 @@ public enum AlertType {
      * <p>Treated as seriously as lateness, and often worse: a passenger who arrives on time for a
      * bus that already left waits a full headway, while a late bus still turns up.
      */
-    VEHICLE_EARLY(AlertSeverity.MINOR, Duration.ofSeconds(60), Duration.ofSeconds(120));
+    VEHICLE_EARLY(AlertSeverity.MINOR, Duration.ofSeconds(60), Duration.ofSeconds(120)),
+
+    /**
+     * The vehicle has been standing at a stop far longer than the timetable allows for.
+     *
+     * <p>No persistence window: the condition is itself a measurement of elapsed time, so requiring
+     * it to hold for a further minute would only mean waiting twice.
+     */
+    LONG_DWELL(AlertSeverity.MINOR, Duration.ZERO, Duration.ofSeconds(60));
 
     private final AlertSeverity defaultSeverity;
     private final Duration persistenceWindow;

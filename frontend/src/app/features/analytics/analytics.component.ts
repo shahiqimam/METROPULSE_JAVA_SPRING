@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import {
   EvAnalytics,
   IncidentAnalytics,
+  Punctuality,
   ServiceRegularity,
   TelemetryApiService
 } from '../../core/telemetry-api.service';
@@ -15,7 +16,10 @@ const ALERT_LABELS: Record<string, string> = {
   BUNCHING: 'Bunching',
   EXCESSIVE_GAP: 'Excessive gap',
   LOW_BATTERY: 'Low battery',
-  OVER_CAPACITY: 'Over capacity'
+  OVER_CAPACITY: 'Over capacity',
+  VEHICLE_LATE: 'Running late',
+  VEHICLE_EARLY: 'Running early',
+  LONG_DWELL: 'Long dwell'
 };
 
 /**
@@ -25,8 +29,9 @@ const ALERT_LABELS: Record<string, string> = {
  * its share of the largest value says everything a chart would, and every number is printed beside it
  * so nothing has to be read off an axis.
  *
- * <p>There is no punctuality figure here, and its absence is stated on the page rather than left as a
- * gap someone has to notice.
+ * <p>Punctuality and regularity are shown as two sections rather than one score. A frequent service
+ * can run perfectly evenly and be consistently late, or be punctual on average while bunching badly,
+ * so blending them would produce a number that answered neither question.
  */
 @Component({
   selector: 'app-analytics',
@@ -52,10 +57,55 @@ const ALERT_LABELS: Record<string, string> = {
         </header>
 
         <section class="panel">
+          <h2>Punctuality</h2>
+          <p class="note">
+            Whether the service ran to its timetable, from recorded stop arrivals: actual against
+            planned. On time is 90 seconds early to 5 minutes late — asymmetric because a late bus
+            still turns up, while an early one has gone.
+          </p>
+
+          <p class="empty" *ngIf="punctuality().length === 0">
+            No stop arrivals recorded in this window.
+          </p>
+
+          <table *ngIf="punctuality().length > 0">
+            <thead>
+              <tr>
+                <th>Route</th><th>On time</th><th>Calls</th><th>Late</th><th>Early</th>
+                <th>Average</th><th>Worst late</th><th>Worst early</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let route of punctuality(); trackBy: trackPunctuality">
+                <td class="mono">{{ route.routeCode }}</td>
+                <td>
+                  <span class="score" [class.warn]="route.onTimePercent < 80">
+                    {{ route.onTimePercent | number: '1.0-1' }}%
+                  </span>
+                  <span class="bars__track bars__track--inline">
+                    <span class="bars__fill" [style.width.%]="route.onTimePercent"></span>
+                  </span>
+                </td>
+                <td>{{ route.measuredCalls }}</td>
+                <td [class.warn]="route.late > 0">{{ route.late }}</td>
+                <td [class.warn]="route.early > 0">{{ route.early }}</td>
+                <td>{{ signed(route.averageDeviationSeconds) }}</td>
+                <td>{{ worst(route.worstLateSeconds, 'late') }}</td>
+                <td>{{ worst(route.worstEarlySeconds, 'early') }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p class="note">
+            A call that was never detected is not counted, which understates how many calls were made
+            rather than overstating how punctual they were.
+          </p>
+        </section>
+
+        <section class="panel">
           <h2>Service regularity</h2>
           <p class="note">
-            How evenly spaced the service ran — not whether it ran on time. Punctuality needs
-            stop-arrival detection, which is not built, so it is not reported.
+            How evenly spaced the service ran — a different question from whether it ran on time.
           </p>
 
           <table>
@@ -203,6 +253,18 @@ const ALERT_LABELS: Record<string, string> = {
       line-height: 1.55;
     }
 
+    .score {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bars__track--inline {
+      display: inline-block;
+      width: 56px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
     .two-up {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -322,6 +384,7 @@ export class AnalyticsComponent {
   protected windowHours = 24;
 
   protected readonly regularity = signal<ServiceRegularity[]>([]);
+  protected readonly punctuality = signal<Punctuality[]>([]);
   protected readonly alertCounts = signal<Record<string, number>>({});
   protected readonly incidents = signal<IncidentAnalytics | null>(null);
   protected readonly ev = signal<EvAnalytics | null>(null);
@@ -350,6 +413,7 @@ export class AnalyticsComponent {
 
   protected load(): void {
     const hours = Number(this.windowHours);
+    this.api.findPunctuality(hours).subscribe({ next: (data) => this.punctuality.set(data) });
     this.api.findServiceRegularity(hours).subscribe({ next: (data) => this.regularity.set(data) });
     this.api.findAlertAnalytics(hours).subscribe({ next: (data) => this.alertCounts.set(data) });
     this.api.findIncidentAnalytics(hours).subscribe({ next: (data) => this.incidents.set(data) });
@@ -368,5 +432,34 @@ export class AnalyticsComponent {
 
   protected trackRoute(_index: number, route: ServiceRegularity): string {
     return route.routeCode;
+  }
+
+  protected trackPunctuality(_index: number, route: Punctuality): string {
+    return route.routeCode;
+  }
+
+  /**
+   * Seconds with their sign kept, because the sign is the whole meaning.
+   *
+   * <p>"+180s" and "-180s" are opposite operational problems, and a bare "180s" is unreadable.
+   */
+  /**
+   * The worst call in one direction, or nothing when there was none in that direction.
+   *
+   * <p>These come from the largest and smallest deviation in the window, so on a route where nothing
+   * ran early the smallest is still a late one. Printing it under "worst early" would report the best
+   * call on the route as its worst.
+   */
+  protected worst(seconds: number, direction: 'late' | 'early'): string {
+    const wrongWay = direction === 'late' ? seconds <= 0 : seconds >= 0;
+    return wrongWay ? 'none' : this.signed(seconds);
+  }
+
+  protected signed(seconds: number): string {
+    const rounded = Math.round(seconds);
+    if (rounded === 0) {
+      return 'on time';
+    }
+    return rounded > 0 ? `+${rounded}s late` : `${rounded}s early`;
   }
 }

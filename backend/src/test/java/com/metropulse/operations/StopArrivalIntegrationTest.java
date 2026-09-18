@@ -76,17 +76,50 @@ class StopArrivalIntegrationTest extends PostgisIntegrationTest {
     }
 
     @Test
-    void arrivingLateRecordsHowLate() {
-        arriveAt(FIRST_STOP_LAT, FIRST_STOP_LON, at("07:03:20"), 0.0);
+    void theSecondStopIsMeasuredOnArrivalNotDeparture() {
+        // Planned 07:01:37; this is a minute and a half after it.
+        arriveAt(SECOND_STOP_LAT, SECOND_STOP_LON, at("07:03:07"), 0.0);
 
-        // Planned 07:00:00, actual 07:03:20 - two hundred seconds late, positive by convention.
+        assertThat(deviationOfLastArrival()).isEqualTo(90);
+    }
+
+    @Test
+    void waitingAtTheOriginBeforeItsDepartureIsNotEarlyRunning() {
+        // The trip leaves West Terminal at 07:00:30. The vehicle is standing there from 06:55.
+        arriveAt(FIRST_STOP_LAT, FIRST_STOP_LON, at("06:55:00"), 0.0);
+
+        // A vehicle laid over at its terminal has "arrived" whenever it pulled in, which says nothing
+        // about the trip. Counting that as five minutes early would make every departure on the route
+        // read as early running.
+        assertThat(deviationOfLastArrival()).isZero();
+        assertThat(currentState().scheduleDeviationSeconds()).isZero();
+    }
+
+    @Test
+    void anOriginThatHasNotLeftOnTimeIsLate() {
+        arriveAt(FIRST_STOP_LAT, FIRST_STOP_LON, at("06:59:00"), 0.0);
+        assertThat(deviationOfLastArrival()).isZero();
+
+        // Still sitting there two minutes after it should have left.
+        arriveAt(FIRST_STOP_LAT, FIRST_STOP_LON, at("07:02:30"), 0.0);
+
+        assertThat(deviationOfLastArrival())
+                .as("planned departure 07:00:30, still at the stop at 07:02:30")
+                .isEqualTo(120);
+    }
+
+    @Test
+    void arrivingLateRecordsHowLate() {
+        arriveAt(SECOND_STOP_LAT, SECOND_STOP_LON, at("07:04:57"), 0.0);
+
+        // Planned 07:01:37, actual 07:04:57 - two hundred seconds late, positive by convention.
         assertThat(deviationOfLastArrival()).isEqualTo(200);
         assertThat(currentState().scheduleDeviationSeconds()).isEqualTo(200);
     }
 
     @Test
     void arrivingEarlyRecordsANegativeDeviation() {
-        arriveAt(FIRST_STOP_LAT, FIRST_STOP_LON, at("06:58:00"), 0.0);
+        arriveAt(SECOND_STOP_LAT, SECOND_STOP_LON, at("06:59:37"), 0.0);
 
         assertThat(deviationOfLastArrival()).isEqualTo(-120);
     }

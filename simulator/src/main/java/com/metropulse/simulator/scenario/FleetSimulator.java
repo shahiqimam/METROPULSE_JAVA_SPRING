@@ -214,6 +214,23 @@ public class FleetSimulator {
                 continue;
             }
 
+            if (leader.vehicle().routeProgress() < leader.progressBefore()) {
+                // The leader has finished and gone back to the terminal to start its next trip. It
+                // was in front when the queue was worked out and is now at the beginning of the
+                // route, so holding the follower behind it drags a vehicle three quarters of the way
+                // through its own run back to the start.
+                continue;
+            }
+
+            if (leader.vehicle().routeProgress() >= 1.0) {
+                // The leader has finished its trip and is waiting out its layover at the terminal. A
+                // terminal holds several vehicles, and treating the one already there as blocking the
+                // road would stop the next arrival twelve metres short of the final stop - close
+                // enough to look right on a map, far enough that it is never recorded as calling
+                // there, and the last stop of every trip would go missing from punctuality.
+                continue;
+            }
+
             double gap = leader.vehicle().routeProgress() - follower.vehicle().routeProgress();
             if (gap < minimumGap) {
                 follower.vehicle().holdAt(Math.max(0.0, leader.vehicle().routeProgress() - minimumGap));

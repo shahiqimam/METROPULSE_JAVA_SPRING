@@ -185,10 +185,15 @@ public class HeadwayEvaluator {
     }
 
     /**
-     * Vehicles on the route whose telemetry is fresh enough to place them.
+     * Vehicles actually running the route, whose telemetry is fresh enough to place them.
      *
      * <p>The age cut-off is the same one the UI calls STALE, so a vehicle the controller can see is
      * not reporting is also not used to claim its followers are bunched.
+     *
+     * <p>Vehicles that have not left the origin are excluded. Several can be sitting at a terminal at
+     * once between trips, all at the same point on the shape, and they are not bunched - they have not
+     * started. Counting them produced pairs a few metres apart that would be classified as the most
+     * severe bunching on the route, which is the phantom this whole design is meant to avoid.
      */
     private List<HeadwayCalculator.VehiclePosition> reportingVehicles(long routeId) {
         return jdbcTemplate.query("""
@@ -200,6 +205,7 @@ public class HeadwayEvaluator {
                 JOIN vehicle v ON v.id = vcs.vehicle_id
                 WHERE vcs.route_id = ?
                   AND vcs.route_progress IS NOT NULL
+                  AND vcs.route_progress > 0
                   AND EXTRACT(EPOCH FROM (now() - vcs.recorded_at)) <= ?
                 """,
                 (rs, rowNum) -> new HeadwayCalculator.VehiclePosition(

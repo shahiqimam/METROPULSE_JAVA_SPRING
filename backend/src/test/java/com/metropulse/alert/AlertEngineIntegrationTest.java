@@ -51,6 +51,7 @@ class AlertEngineIntegrationTest extends PostgisIntegrationTest {
         jdbcTemplate.update("DELETE FROM alert");
         jdbcTemplate.update("DELETE FROM headway_condition");
         jdbcTemplate.update("DELETE FROM vehicle_current_state");
+        jdbcTemplate.update("DELETE FROM stop_arrival");
     }
 
     @Test
@@ -315,6 +316,40 @@ class AlertEngineIntegrationTest extends PostgisIntegrationTest {
     }
 
     /** Puts a vehicle off route and runs the engine until the alert exists. */
+    @Test
+    void aVehicleStandingAtAStopTooLongRaisesALongDwellAlert() {
+        placeVehicle(VEHICLE, 0.25, 0);
+        standAtFirstStopFor(240);
+
+        alertEngine.evaluate();
+
+        // No persistence window on this type: four minutes standing is already the evidence.
+        assertThat(liveAlerts()).extracting(AlertView::type).containsExactly(AlertType.LONG_DWELL);
+    }
+
+    @Test
+    void anOrdinaryDwellRaisesNoAlert() {
+        placeVehicle(VEHICLE, 0.25, 0);
+        standAtFirstStopFor(30);
+
+        alertEngine.evaluate();
+
+        assertThat(liveAlerts()).isEmpty();
+        assertThat(candidateCount()).isZero();
+    }
+
+    @Test
+    void aDwellThatHasBeenClosedIsNoLongerADwellAtAll() {
+        placeVehicle(VEHICLE, 0.25, 0);
+        standAtFirstStopFor(600);
+        // The vehicle pulled away: the detector closes the arrival with a departure.
+        jdbcTemplate.update("UPDATE stop_arrival SET departed_at = now(), dwell_seconds = 600");
+
+        alertEngine.evaluate();
+
+        assertThat(liveAlerts()).isEmpty();
+    }
+
     private void openRouteDeviationAlert() {
         placeVehicle(VEHICLE, 0.5, 300);
         alertEngine.evaluate();
@@ -322,6 +357,38 @@ class AlertEngineIntegrationTest extends PostgisIntegrationTest {
         refreshTelemetry();
         alertEngine.evaluate();
         assertThat(liveAlerts()).hasSize(1);
+    }
+
+    /**
+     * Puts the vehicle on a trip and leaves it standing at that trip's first stop.
+     *
+     * <p>An arrival with no departure is exactly what an in-progress dwell is, so this writes the
+     * same row the detector would rather than a state invented for the test.
+     */
+    private void standAtFirstStopFor(int seconds) {
+        jdbcTemplate.update("""
+                UPDATE vehicle_current_state vcs
+                SET active_trip_id = t.id, speed_kph = 0
+                FROM trip t
+                WHERE t.trip_code = 'M42-WKD-0700-EAST'
+                  AND vcs.vehicle_id = (SELECT id FROM vehicle WHERE fleet_number = ?)
+                """, VEHICLE);
+
+        jdbcTemplate.update("""
+                INSERT INTO stop_arrival (
+                    trip_id, stop_id, vehicle_id, stop_sequence, service_date,
+                    arrived_at, planned_arrival_seconds, actual_arrival_seconds, deviation_seconds
+                )
+                SELECT st.trip_id, st.stop_id, v.id, st.stop_sequence, CURRENT_DATE,
+                       now() - make_interval(secs => CAST(? AS int)),
+                       st.planned_arrival_seconds, st.planned_arrival_seconds, 0
+                FROM stop_time st
+                JOIN trip t ON t.id = st.trip_id
+                CROSS JOIN vehicle v
+                WHERE t.trip_code = 'M42-WKD-0700-EAST'
+                  AND st.stop_sequence = 1
+                  AND v.fleet_number = ?
+                """, seconds, VEHICLE);
     }
 
     private List<AlertView> liveAlerts() {
