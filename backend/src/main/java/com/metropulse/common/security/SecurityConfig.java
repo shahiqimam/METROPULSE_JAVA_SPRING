@@ -54,8 +54,15 @@ import java.util.List;
  * question you answer by grepping.
  *
  * <p>The shape of the policy: reading is open to any authenticated operator, acting on the network
- * needs a CONTROLLER, and administration needs an ADMIN. A PLANNER and a VIEWER can see everything
- * and change nothing, which is what those jobs are.
+ * needs a CONTROLLER, and administration needs an ADMIN. A VIEWER can see everything and change
+ * nothing, which is what that job is.
+ *
+ * <p>A PLANNER is the one exception, and it is deliberate. Planners may upload a schedule feed and
+ * read what it would change, because that is their job and because staging writes nothing
+ * operational — a staged feed is a proposal sitting in a table. Putting one into service is an
+ * administrator's decision, since it changes what every operational number on the network is
+ * measured against. Building a preview for planners to review and then putting it behind a role they
+ * do not have would have been a screen nobody could reach.
  *
  * <p>Telemetry ingest is not part of this at all — it is machine-to-machine, authenticated by the
  * ingest key, and a bearer token would mean the simulator holding an operator's credentials.
@@ -67,6 +74,7 @@ public class SecurityConfig {
     private static final String CONTROLLER = "CONTROLLER";
     private static final String ADMIN = "ADMIN";
     private static final String FLEET_SUPERVISOR = "FLEET_SUPERVISOR";
+    private static final String PLANNER = "PLANNER";
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, MetroPulseProperties properties) throws Exception {
@@ -99,6 +107,20 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/incidents/**").hasAnyRole(CONTROLLER, ADMIN)
                         .requestMatchers(HttpMethod.POST, "/api/v1/charging-sessions/**")
                                 .hasAnyRole(CONTROLLER, FLEET_SUPERVISOR, ADMIN)
+
+                        // Putting a feed into service, or setting one aside. Listed before the
+                        // blanket admin rule, because the first match wins.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/schedule/imports/*/activate")
+                                .hasRole(ADMIN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/schedule/imports/*/discard")
+                                .hasRole(ADMIN)
+
+                        // Uploading a feed and reading what it would change. Writes nothing
+                        // operational: a staged feed is a proposal, not a schedule.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/schedule/imports")
+                                .hasAnyRole(PLANNER, ADMIN)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/schedule/imports/**")
+                                .hasAnyRole(PLANNER, ADMIN)
 
                         // Administration.
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN)

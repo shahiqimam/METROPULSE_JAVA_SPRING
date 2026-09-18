@@ -78,6 +78,10 @@ describe('ScheduleComponent', () => {
       .map((button) => button.textContent?.trim() ?? '');
   }
 
+  function uploadControl(): Element | null {
+    return (fixture.nativeElement as HTMLElement).querySelector('.upload input');
+  }
+
   function text(): string {
     return (fixture.nativeElement as HTMLElement).textContent ?? '';
   }
@@ -105,9 +109,12 @@ describe('ScheduleComponent', () => {
     expect(decisionButtons()).toEqual(['Put into service', 'Discard']);
   });
 
-  it('offers no decision to someone who cannot make it', () => {
+  it('lets a planner upload and read, but not decide', () => {
     render([staged], 'PLANNER');
 
+    // The preview exists for planners to review. Deciding is the administrator's act, and the API
+    // enforces that regardless of what this screen shows.
+    expect(uploadControl()).not.toBeNull();
     expect(decisionButtons()).toEqual([]);
     expect(text()).toContain('An administrator decides');
   });

@@ -92,6 +92,17 @@ export class AuthService {
     return this.currentUser()?.role === 'ADMIN';
   }
 
+  /**
+   * True for someone who may upload a feed for review.
+   *
+   * <p>Planners stage and read; only an administrator puts a feed into service. As with the others,
+   * this decides what is worth showing and nothing else.
+   */
+  canReviewSchedules(): boolean {
+    const role = this.currentUser()?.role;
+    return role === 'PLANNER' || role === 'ADMIN';
+  }
+
   clear(): void {
     write(ACCESS_TOKEN_KEY, null);
     write(REFRESH_TOKEN_KEY, null);

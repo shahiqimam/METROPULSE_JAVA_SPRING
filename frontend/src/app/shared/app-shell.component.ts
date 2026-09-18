@@ -30,7 +30,7 @@ import { RealtimeService } from '../core/realtime/realtime.service';
         <a routerLink="/ev" routerLinkActive="active">EV</a>
         <a routerLink="/analytics" routerLinkActive="active">Analytics</a>
         <a routerLink="/playback" routerLinkActive="active">Playback</a>
-        <a routerLink="/schedule" routerLinkActive="active">Schedule</a>
+        <a routerLink="/schedule" routerLinkActive="active" *ngIf="canReviewSchedules()">Schedule</a>
       </nav>
 
       <div class="topbar__right">
@@ -187,6 +187,9 @@ export class AppShellComponent {
   readonly showChannel = input(false);
 
   protected readonly user = this.auth.user;
+
+  /** The schedule area is for planners and administrators; others have no business in it. */
+  protected readonly canReviewSchedules = () => this.auth.canReviewSchedules();
   protected readonly realtimeState = this.realtime.state;
 
   protected roleLabel(role: UserRole): string {

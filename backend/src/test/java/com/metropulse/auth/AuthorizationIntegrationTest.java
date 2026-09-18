@@ -32,11 +32,20 @@ class AuthorizationIntegrationTest extends PostgisIntegrationTest {
     @Autowired
     private AuthenticationService authenticationService;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+
+        // These tests are about who may do a thing, not about what the thing leaves behind. Without
+        // this, one test occupying a charger makes a later one fail with 409 - and since JUnit orders
+        // methods by a hash of their names, adding an unrelated test can be what triggers it.
+        jdbcTemplate.update("DELETE FROM charging_session");
+        jdbcTemplate.update("UPDATE charger SET status = 'AVAILABLE' WHERE status = 'OCCUPIED'");
     }
 
     @Test
@@ -104,6 +113,31 @@ class AuthorizationIntegrationTest extends PostgisIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(incidentJson()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aPlannerMayReviewScheduleFeedsButNotPutOneIntoService() throws Exception {
+        String token = tokenFor("planner@metropulse.test", "planner-dev-password");
+
+        mockMvc.perform(get("/api/v1/admin/schedule/imports").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        // Staging is a proposal; activation changes what every operational number is measured
+        // against, so it stays an administrator's decision.
+        mockMvc.perform(post("/api/v1/admin/schedule/imports/1/activate")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/schedule/imports/1/discard")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aControllerHasNoBusinessInTheScheduleArea() throws Exception {
+        String token = tokenFor("controller@metropulse.test", "controller-dev-password");
+
+        mockMvc.perform(get("/api/v1/admin/schedule/imports").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 

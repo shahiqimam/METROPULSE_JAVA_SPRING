@@ -98,7 +98,7 @@ npm --prefix frontend run build
 
 `mvnw` downloads Maven itself — only Java 21+ is required.
 
-**352 tests** — 316 backend and simulator, 36 frontend. Threshold and rule logic as unit tests;
+**382 tests** — 318 backend and simulator, 64 frontend. Threshold and rule logic as unit tests;
 migrations, PostGIS behaviour, the Kafka consumer, charger concurrency, authentication, schedule
 import and the WebSocket as integration tests against real infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
 projection depends on. See [testing.md](docs/testing.md).
@@ -163,11 +163,8 @@ The control centre has six screens: **Network** (live map, fleet, headway, alert
 Written down rather than implied, because a portfolio project that overstates itself is worse than
 one with a short honest list:
 
-- **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
-  preview a planner can review before switching over.
-- **Screenshots and diagrams.** The docs describe the system in prose; there are no images.
-- **Component tests for most screens.** The schedule review screen is rendered in tests; the other
-  five are not.
+- **Screenshots.** The docs carry Mermaid diagrams of the runtime, the event path and the two state
+  machines, but there are no images of the running control centre.
 - **Retention.** The policy is documented; nothing prunes automatically.
 - **Horizontal scale.** One backend instance: two would contend on the outbox publisher and would
   each broadcast to only their own WebSocket subscribers.

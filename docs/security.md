@@ -44,13 +44,19 @@ Two bugs found while testing this, both fixed:
 
 Five roles, describing jobs rather than permissions:
 
-| Role | May read | May act on the network | Administration |
-| --- | --- | --- | --- |
-| `ADMIN` | yes | yes | yes |
-| `CONTROLLER` | yes | yes | no |
-| `FLEET_SUPERVISOR` | yes | charging only | no |
-| `PLANNER` | yes | no | no |
-| `VIEWER` | yes | no | no |
+| Role | May read | May act on the network | Schedule feeds | Administration |
+| --- | --- | --- | --- | --- |
+| `ADMIN` | yes | yes | stage and activate | yes |
+| `CONTROLLER` | yes | yes | no | no |
+| `FLEET_SUPERVISOR` | yes | charging only | no | no |
+| `PLANNER` | yes | no | stage and review | no |
+| `VIEWER` | yes | no | no | no |
+
+The planner's column is the one that needed thinking about. Uploading a feed writes nothing
+operational — it produces a proposal and a preview of what activating it would change — so a planner
+can do it. Activating changes what every number on the network is measured against, retrospectively
+as well as going forward, so that stays with an administrator. Building a review screen and then
+putting it behind a role its reviewers do not have would have made it a screen nobody could reach.
 
 Rules are expressed by URL and method in `SecurityConfig`, in one place, so the whole policy reads at
 once. Scattering `@PreAuthorize` across controllers makes "who can close an alert" a question you

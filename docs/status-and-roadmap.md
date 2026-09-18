@@ -50,7 +50,8 @@ What is built, what is verified, and what is not — kept honest rather than asp
 
 ### Platform
 
-- JWT access tokens, rotating hashed refresh tokens, five roles, URL-based authorisation
+- JWT access tokens, rotating hashed refresh tokens, five roles, URL-based authorisation; a planner
+  may stage and review a schedule feed but only an administrator may put one into service
 - WebSocket/STOMP broadcasts authenticated in the CONNECT frame, with REST as baseline and polling as
   fallback
 - GTFS-style import in two steps: an upload parses, validates and stages a preview of what would
@@ -66,9 +67,9 @@ What is built, what is verified, and what is not — kept honest rather than asp
 
 Everything below was run, not assumed.
 
-- `./mvnw clean verify` → BUILD SUCCESS: **291 backend + 25 simulator tests**
-- `npm run test` → **36 frontend tests**, headless Chrome, including the schedule review screen
-  rendered against a stubbed API
+- `./mvnw clean verify` → BUILD SUCCESS: **293 backend + 25 simulator tests**
+- `npm run test` → **64 frontend tests**, headless Chrome, with every screen rendered against a
+  stubbed API rather than tested only through its service layer
 - Integration tests run the full migration set against real PostgreSQL/PostGIS
 - Kafka consumer, redelivery and dead-lettering exercised against an in-process broker
 - Charger concurrency test fails when `FOR UPDATE` is removed — the check that makes it meaningful
@@ -119,11 +120,11 @@ not.
 
 ## Next
 
-1. Screenshots and diagrams for the README.
-2. Component tests for the remaining screens; the schedule review screen has them, the other five
-   do not.
-3. Let a PLANNER stage a feed without being able to activate it. Today the whole admin area is one
-   role, so the persona the preview was built for cannot reach it.
+1. Screenshots for the README. The docs carry Mermaid diagrams; there are no images of the running
+   control centre, and capturing them needs a browser and a person.
+2. Retention. The policy is documented; nothing prunes.
+3. Horizontal scale: claiming outbox rows with `FOR UPDATE SKIP LOCKED`, and a broker relay so two
+   backends do not each broadcast to only their own subscribers.
 
 ## What live running caught that the tests did not
 

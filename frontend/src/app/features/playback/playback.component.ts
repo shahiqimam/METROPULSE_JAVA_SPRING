@@ -315,6 +315,14 @@ export class PlaybackComponent implements OnDestroy {
       routeCode: this.routeCode || null,
       routeProgress: null,
       routeDeviationMeters: null,
+      // Stored frames carry position, not the schedule comparison that was made against them at the
+      // time. Recomputing one now would compare an hour-old position against the timetable as it
+      // stands today, which is a different measurement wearing the same name.
+      tripCode: null,
+      scheduleDeviationSeconds: null,
+      nextStopName: null,
+      dwellingAtStopName: null,
+      dwellSeconds: null,
       // A replayed frame is historical by definition; age would be meaningless, so it reads as fresh
       // within the replay's own timeline rather than pretending to be live.
       telemetryAgeSeconds: 0,

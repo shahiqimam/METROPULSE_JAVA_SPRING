@@ -20,6 +20,14 @@ export interface LatestVehicleTelemetry {
   routeCode: string | null;
   routeProgress: number | null;
   routeDeviationMeters: number | null;
+  /** The scheduled trip the vehicle says it is running, or null when it is out of service. */
+  tripCode: string | null;
+  /** Positive is late, negative is early, null until the vehicle has called at a stop. */
+  scheduleDeviationSeconds: number | null;
+  nextStopName: string | null;
+  /** The stop it is standing at right now, with how long it has been there. */
+  dwellingAtStopName: string | null;
+  dwellSeconds: number | null;
   telemetryAgeSeconds: number;
   connectivityState: 'ONLINE' | 'STALE' | 'OFFLINE';
 }
@@ -89,7 +97,10 @@ export type AlertType =
   | 'BUNCHING'
   | 'EXCESSIVE_GAP'
   | 'LOW_BATTERY'
-  | 'OVER_CAPACITY';
+  | 'OVER_CAPACITY'
+  | 'VEHICLE_LATE'
+  | 'VEHICLE_EARLY'
+  | 'LONG_DWELL';
 
 export interface OperationalAlert {
   id: number;

@@ -46,6 +46,20 @@ import { connectivityLabel, formatAge, formatCode, isLowBattery, isOffRoute, sta
               <span class="row__age">{{ age(vehicle) }} ago</span>
             </div>
 
+            <div class="row__trip" *ngIf="vehicle.tripCode">
+              <span class="row__where">
+                <ng-container *ngIf="vehicle.dwellingAtStopName; else heading">
+                  at {{ vehicle.dwellingAtStopName }}
+                </ng-container>
+                <ng-template #heading>
+                  <ng-container *ngIf="vehicle.nextStopName">→ {{ vehicle.nextStopName }}</ng-container>
+                </ng-template>
+              </span>
+              <span class="row__adherence" [attr.data-adherence]="adherence(vehicle)">
+                {{ scheduleStanding(vehicle) }}
+              </span>
+            </div>
+
             <div class="bar" [attr.aria-label]="'Route progress ' + ((vehicle.routeProgress ?? 0) * 100 | number: '1.0-0') + '%'">
               <div class="bar__fill" [style.width.%]="(vehicle.routeProgress ?? 0) * 100"></div>
             </div>
@@ -109,6 +123,37 @@ import { connectivityLabel, formatAge, formatCode, isLowBattery, isOffRoute, sta
     }
 
     .panel__meta,
+    .row__trip {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 11px;
+    }
+
+    .row__where {
+      color: var(--ink-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row__adherence {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .row__adherence[data-adherence='on-time'] {
+      color: var(--ink-muted);
+    }
+
+    .row__adherence[data-adherence='late'],
+    .row__adherence[data-adherence='early'] {
+      color: var(--warning-ink, #7a5b00);
+    }
+
     .row__meta {
       color: var(--ink-muted);
       font-size: 12px;
@@ -288,6 +333,39 @@ export class FleetPanelComponent {
 
   protected lowBattery(vehicle: LatestVehicleTelemetry): boolean {
     return isLowBattery(vehicle);
+  }
+
+  /**
+   * How the vehicle stands against its timetable, in the words a controller would use.
+   *
+   * <p>Null is not zero. A vehicle that has not yet called at a stop on its trip has nothing to be
+   * measured against, and printing "on time" for it would be inventing a measurement.
+   */
+  protected scheduleStanding(vehicle: LatestVehicleTelemetry): string {
+    const deviation = vehicle.scheduleDeviationSeconds;
+    if (deviation === null) {
+      return 'not yet measured';
+    }
+    if (Math.abs(deviation) < 60) {
+      return 'on time';
+    }
+    const minutes = Math.round(Math.abs(deviation) / 60);
+    return deviation > 0 ? `${minutes} min late` : `${minutes} min early`;
+  }
+
+  /** Which way it is off, for the colour. The thresholds match the alert rules. */
+  protected adherence(vehicle: LatestVehicleTelemetry): string {
+    const deviation = vehicle.scheduleDeviationSeconds;
+    if (deviation === null) {
+      return 'unknown';
+    }
+    if (deviation >= 300) {
+      return 'late';
+    }
+    if (deviation <= -90) {
+      return 'early';
+    }
+    return 'on-time';
   }
 
   protected trackVehicle(_index: number, vehicle: LatestVehicleTelemetry): string {

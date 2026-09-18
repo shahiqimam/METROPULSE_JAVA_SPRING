@@ -8,10 +8,15 @@ POST   /api/v1/admin/schedule/imports/{id}/activate  put it into service
 POST   /api/v1/admin/schedule/imports/{id}/discard   set it aside
 ```
 
-Administrator-only, because replacing the schedule changes what every operational calculation — route
-progress, headway, deviation, punctuality — is measured against. That is not something a controller
-does mid-shift. (A planner reviewing a feed without being able to activate it would be a reasonable
-next refinement; today the whole area is one role.)
+Split by role rather than by area:
+
+- a **PLANNER** may upload a feed and read what it would change, because that is their job and
+  because staging writes nothing operational — a staged feed is a proposal sitting in a table;
+- only an **ADMIN** may activate or discard one, because that changes what every operational
+  calculation — route progress, headway, deviation, punctuality — is measured against. Not something
+  a controller does mid-shift, and not something to do because a file uploaded cleanly.
+
+A CONTROLLER has no business in the schedule area at all, and gets a 403 from every endpoint here.
 
 ## The supported subset
 

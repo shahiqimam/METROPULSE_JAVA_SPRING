@@ -32,7 +32,7 @@ import { AppShellComponent } from '../../shared/app-shell.component';
             <h1>Schedule</h1>
             <p>Feeds are reviewed before they replace the timetable in service.</p>
           </div>
-          <label class="upload">
+          <label class="upload" *ngIf="canReview">
             <input type="file" multiple accept=".txt,.csv" (change)="stage($event)" [disabled]="busy()" />
             <span class="upload__button">{{ busy() ? 'Checking…' : 'Upload a feed' }}</span>
           </label>
@@ -316,7 +316,9 @@ export class ScheduleComponent {
   protected readonly error = signal<string | null>(null);
 
   /** Only for deciding what to put on screen; the API refuses the request either way. */
-  protected readonly canAdminister = inject(AuthService).canAdminister();
+  private readonly auth = inject(AuthService);
+  protected readonly canAdminister = this.auth.canAdminister();
+  protected readonly canReview = this.auth.canReviewSchedules();
 
   constructor() {
     this.load();

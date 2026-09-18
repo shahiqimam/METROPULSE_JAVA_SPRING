@@ -36,6 +36,11 @@ describe('vehicle status', () => {
       routeCode: 'M42',
       routeProgress: 0.5,
       routeDeviationMeters: 5,
+      tripCode: 'M42-WKD-0700-EAST',
+      scheduleDeviationSeconds: 0,
+      nextStopName: 'Central Library',
+      dwellingAtStopName: null,
+      dwellSeconds: null,
       telemetryAgeSeconds: 2,
       connectivityState: 'ONLINE',
       ...overrides
