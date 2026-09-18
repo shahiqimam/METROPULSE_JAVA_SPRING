@@ -11,7 +11,9 @@ import com.metropulse.ev.domain.VehicleAlreadyChargingException;
 import com.metropulse.incident.domain.InvalidIncidentTransitionException;
 import com.metropulse.incident.domain.UnknownIncidentException;
 import com.metropulse.playback.domain.UnknownPlaybackSessionException;
+import com.metropulse.schedule.importer.ScheduleImportAlreadyDecidedException;
 import com.metropulse.schedule.importer.ScheduleImportException;
+import com.metropulse.schedule.importer.UnknownScheduleImportException;
 import com.metropulse.telemetry.domain.InvalidIngestKeyException;
 import com.metropulse.telemetry.domain.UnknownVehicleException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,6 +72,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidRefreshTokenException.class)
     public ResponseEntity<ApiError> handleInvalidRefreshToken(InvalidRefreshTokenException ex, HttpServletRequest request) {
         return error(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", "Refresh token is not valid.", request);
+    }
+
+    @ExceptionHandler(UnknownScheduleImportException.class)
+    public ResponseEntity<ApiError> handleUnknownScheduleImport(
+            UnknownScheduleImportException ex,
+            HttpServletRequest request
+    ) {
+        return error(HttpStatus.NOT_FOUND, "UNKNOWN_SCHEDULE_IMPORT", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ScheduleImportAlreadyDecidedException.class)
+    public ResponseEntity<ApiError> handleScheduleImportAlreadyDecided(
+            ScheduleImportAlreadyDecidedException ex,
+            HttpServletRequest request
+    ) {
+        return error(HttpStatus.CONFLICT, "SCHEDULE_IMPORT_ALREADY_DECIDED", ex.getMessage(), request);
     }
 
     @ExceptionHandler(UnknownAlertException.class)

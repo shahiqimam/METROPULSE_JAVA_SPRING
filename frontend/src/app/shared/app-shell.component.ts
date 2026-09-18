@@ -30,6 +30,7 @@ import { RealtimeService } from '../core/realtime/realtime.service';
         <a routerLink="/ev" routerLinkActive="active">EV</a>
         <a routerLink="/analytics" routerLinkActive="active">Analytics</a>
         <a routerLink="/playback" routerLinkActive="active">Playback</a>
+        <a routerLink="/schedule" routerLinkActive="active">Schedule</a>
       </nav>
 
       <div class="topbar__right">

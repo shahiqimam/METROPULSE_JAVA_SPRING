@@ -53,20 +53,22 @@ What is built, what is verified, and what is not — kept honest rather than asp
 - JWT access tokens, rotating hashed refresh tokens, five roles, URL-based authorisation
 - WebSocket/STOMP broadcasts authenticated in the CONNECT frame, with REST as baseline and polling as
   fallback
-- GTFS-style import: parse, validate, activate in one transaction, administrator-only
-- Angular control centre with five screens: network (map, fleet, headway, alerts), incidents, EV,
-  analytics (punctuality and regularity) and playback, plus login and route guard
+- GTFS-style import in two steps: an upload parses, validates and stages a preview of what would
+  change; a separate decision activates or discards it, with who did which recorded
+- Angular control centre with six screens: network (map, fleet, headway, alerts), incidents, EV,
+  analytics (punctuality and regularity), playback and schedule review, plus login and route guard
 - Simulator running scheduled trips on the seeded geometry, at the speed the timetable implies, with
   eight reproducible scenarios and no overtaking
 - Development and production-style Compose stacks, nginx edge, Jenkins pipeline, smoke-test script
-- Maven Wrapper; 16 Flyway migrations
+- Maven Wrapper; 17 Flyway migrations
 
 ## Verified
 
 Everything below was run, not assumed.
 
-- `./mvnw clean verify` → BUILD SUCCESS: **271 backend + 25 simulator tests**
-- `npm run test` → **29 frontend tests**, headless Chrome
+- `./mvnw clean verify` → BUILD SUCCESS: **291 backend + 25 simulator tests**
+- `npm run test` → **36 frontend tests**, headless Chrome, including the schedule review screen
+  rendered against a stubbed API
 - Integration tests run the full migration set against real PostgreSQL/PostGIS
 - Kafka consumer, redelivery and dead-lettering exercised against an in-process broker
 - Charger concurrency test fails when `FOR UPDATE` is removed — the check that makes it meaningful
@@ -95,16 +97,15 @@ Everything below was run, not assumed.
 
 ## Not built
 
-- **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
-  preview a planner can review before switching over.
 - **Frontend component tests.** The status rules, session service and HTTP interceptor are covered;
   the components themselves are not rendered in tests.
 - **Redis.** Running in both stacks and used by nothing. It was provisioned for caching and rule
   counters that PostgreSQL has handled adequately so far. Better to say so than to add a decorative
   cache.
 - **Retention.** Policy documented, nothing prunes.
-- **Horizontal scale.** Single instance: two backends would contend on the outbox publisher
-  (`FOR UPDATE SKIP LOCKED`) and each broadcast to only their own subscribers (broker relay).
+- **Horizontal scale.** Single instance: two backends would both poll the same outbox rows, which
+  needs claiming with `FOR UPDATE SKIP LOCKED`, and each would broadcast to only their own
+  subscribers, which needs a broker relay.
 - **TLS**, log aggregation, platform metrics, rate limiting on login.
 - **Jenkins** has not run on a real instance; each stage's commands were validated by hand.
 
@@ -118,10 +119,11 @@ not.
 
 ## Next
 
-1. GTFS import with staged activation.
-2. Outbox failure test: Kafka down, telemetry still commits, publisher drains the backlog on recovery.
-3. Screenshots and diagrams for the README.
-4. Component tests for the Angular screens.
+1. Screenshots and diagrams for the README.
+2. Component tests for the remaining screens; the schedule review screen has them, the other five
+   do not.
+3. Let a PLANNER stage a feed without being able to activate it. Today the whole admin area is one
+   role, so the persona the preview was built for cannot reach it.
 
 ## What live running caught that the tests did not
 

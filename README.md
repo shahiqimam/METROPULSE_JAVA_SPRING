@@ -98,7 +98,7 @@ npm --prefix frontend run build
 
 `mvnw` downloads Maven itself — only Java 21+ is required.
 
-**325 tests** — 296 backend and simulator, 29 frontend. Threshold and rule logic as unit tests;
+**352 tests** — 316 backend and simulator, 36 frontend. Threshold and rule logic as unit tests;
 migrations, PostGIS behaviour, the Kafka consumer, charger concurrency, authentication, schedule
 import and the WebSocket as integration tests against real infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
 projection depends on. See [testing.md](docs/testing.md).
@@ -132,9 +132,12 @@ hysteresis so a vehicle sitting on a threshold cannot flap an alert on and off.
 bugs the tests caught: a revocation rolled back by the exception that triggered it, and a logout that
 signed the operator out everywhere.
 
-**[Schedule import](docs/schedule-import.md)** — validate everything then write everything, why times
-past midnight are not normalised, and why `split(",")` is wrong for a stop called "Union Square,
-North".
+**[Schedule import](docs/schedule-import.md)** — why an upload stages rather than activates, what a
+preview has to say for a planner to decide, why times past midnight are not normalised, and why
+`split(",")` is wrong for a stop called "Union Square, North".
+
+**[The outbox under failure](docs/outbox.md)** — telemetry is still accepted while the broker is
+unreachable, the backlog drains in order when it returns, and nothing is sent twice.
 
 **[Deployment](docs/deployment.md)** — including the nginx DNS trap that 502s every request after a
 backend restart, and how it was verified.
@@ -152,8 +155,8 @@ infra/       nginx edge and operational scripts
 Backend packages are organised by capability — `telemetry`, `operations`, `alert`, `incident`, `ev`,
 `playback`, `analytics`, `auth`, `realtime`, `schedule` — rather than by layer.
 
-The control centre has five screens: **Network** (live map, fleet, headway, alerts), **Incidents**,
-**EV**, **Analytics** and **Playback**.
+The control centre has six screens: **Network** (live map, fleet, headway, alerts), **Incidents**,
+**EV**, **Analytics**, **Playback** and **Schedule**.
 
 ## What is not built
 
@@ -163,6 +166,8 @@ one with a short honest list:
 - **Staged schedule import.** Validation happens in memory and activation is immediate; there is no
   preview a planner can review before switching over.
 - **Screenshots and diagrams.** The docs describe the system in prose; there are no images.
+- **Component tests for most screens.** The schedule review screen is rendered in tests; the other
+  five are not.
 - **Retention.** The policy is documented; nothing prunes automatically.
 - **Horizontal scale.** One backend instance: two would contend on the outbox publisher and would
   each broadcast to only their own WebSocket subscribers.

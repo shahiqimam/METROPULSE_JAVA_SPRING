@@ -77,6 +77,23 @@ The publisher sends in `created_at` order and keys by vehicle, so a vehicle's ev
 partition in the order they were accepted. A consumer can still see them out of order after a retry,
 which is why the projection carries its own no-rewind guard rather than trusting delivery order.
 
+## What the tests prove
+
+`OutboxPublisherIntegrationTest` drives the real publisher with a producer that cannot reach a
+broker, then with one that can:
+
+- telemetry is still accepted while publishing is impossible, because the event is committed with the
+  observation rather than sent from inside the request
+- a failed send leaves the row unpublished and records why, rather than dropping it
+- repeated failures keep counting instead of giving up
+- the backlog drains when the producer recovers, in the order it was written, and the recorded error
+  is cleared
+- an already-published event is never sent twice
+
+Failure is injected at the producer rather than by stopping a broker, so this says nothing about how
+a real Kafka client behaves during an outage — reconnection, request timeouts and metadata refresh
+are the client's business. The broker path itself is covered separately against an embedded Kafka.
+
 ## Not yet built
 
 - The publisher is single-instance; two backends would both poll the same rows. Claiming rows with

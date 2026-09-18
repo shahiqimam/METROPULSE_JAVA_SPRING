@@ -32,5 +32,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/playback/playback.component').then((m) => m.PlaybackComponent)
   },
+  {
+    path: 'schedule',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/schedule/schedule.component').then((m) => m.ScheduleComponent)
+  },
   { path: '**', redirectTo: 'dashboard' }
 ];

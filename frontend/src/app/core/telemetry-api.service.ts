@@ -181,6 +181,47 @@ export interface ChargingSession {
   startedBy: string;
 }
 
+export interface ScheduleChange {
+  added: number;
+  updated: number;
+}
+
+export interface SchedulePreview {
+  agencies: ScheduleChange;
+  routes: ScheduleChange;
+  stops: ScheduleChange;
+  calendars: ScheduleChange;
+  trips: ScheduleChange;
+  stopTimes: number;
+  shapePoints: number;
+  unchangedInFeed: string[];
+  notes: string[];
+}
+
+export interface ScheduleImportResult {
+  agencies: number;
+  routes: number;
+  stops: number;
+  calendars: number;
+  trips: number;
+  stopTimes: number;
+  shapePoints: number;
+}
+
+export interface StagedScheduleImport {
+  id: number;
+  status: 'STAGED' | 'ACTIVATED' | 'DISCARDED';
+  uploadedBy: string;
+  uploadedAt: string;
+  activatedBy: string | null;
+  activatedAt: string | null;
+  discardedBy: string | null;
+  discardedAt: string | null;
+  preview: SchedulePreview;
+  fileNames: string[];
+  result: ScheduleImportResult | null;
+}
+
 export interface Punctuality {
   routeCode: string;
   measuredCalls: number;
@@ -322,6 +363,28 @@ export class TelemetryApiService {
   }
 
   // Analytics
+
+  // Schedule imports
+
+  findScheduleImports(): Observable<StagedScheduleImport[]> {
+    return this.http.get<StagedScheduleImport[]>(`${this.apiBase}/admin/schedule/imports`);
+  }
+
+  stageScheduleImport(files: File[]): Observable<StagedScheduleImport> {
+    const form = new FormData();
+    for (const file of files) {
+      form.append('files', file, file.name);
+    }
+    return this.http.post<StagedScheduleImport>(`${this.apiBase}/admin/schedule/imports`, form);
+  }
+
+  activateScheduleImport(id: number): Observable<StagedScheduleImport> {
+    return this.http.post<StagedScheduleImport>(`${this.apiBase}/admin/schedule/imports/${id}/activate`, {});
+  }
+
+  discardScheduleImport(id: number): Observable<StagedScheduleImport> {
+    return this.http.post<StagedScheduleImport>(`${this.apiBase}/admin/schedule/imports/${id}/discard`, {});
+  }
 
   findPunctuality(windowHours = 24): Observable<Punctuality[]> {
     return this.http.get<Punctuality[]>(`${this.apiBase}/analytics/punctuality?windowHours=${windowHours}`);

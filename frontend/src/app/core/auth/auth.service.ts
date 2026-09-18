@@ -81,6 +81,17 @@ export class AuthService {
     return role === 'CONTROLLER' || role === 'ADMIN';
   }
 
+  /**
+   * True for an administrator, used for showing the schedule area only.
+   *
+   * <p>Like {@link canAct}, this decides what is worth putting on screen and nothing else. The API
+   * refuses the request either way; hiding a control the server would reject is a courtesy, not a
+   * security boundary.
+   */
+  canAdminister(): boolean {
+    return this.currentUser()?.role === 'ADMIN';
+  }
+
   clear(): void {
     write(ACCESS_TOKEN_KEY, null);
     write(REFRESH_TOKEN_KEY, null);

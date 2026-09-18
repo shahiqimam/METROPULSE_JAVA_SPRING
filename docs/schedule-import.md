@@ -1,11 +1,17 @@
 # Schedule Import
 
 ```text
-POST /api/v1/admin/schedule/import      multipart, one part per file, ADMIN only
+POST   /api/v1/admin/schedule/imports              multipart, one part per file — stages only
+GET    /api/v1/admin/schedule/imports              what has been staged, newest first
+GET    /api/v1/admin/schedule/imports/{id}         one import with its preview
+POST   /api/v1/admin/schedule/imports/{id}/activate  put it into service
+POST   /api/v1/admin/schedule/imports/{id}/discard   set it aside
 ```
 
 Administrator-only, because replacing the schedule changes what every operational calculation — route
-progress, headway, deviation — is measured against. That is not something a controller does mid-shift.
+progress, headway, deviation, punctuality — is measured against. That is not something a controller
+does mid-shift. (A planner reviewing a feed without being able to activate it would be a reasonable
+next refinement; today the whole area is one role.)
 
 ## The supported subset
 
@@ -22,7 +28,7 @@ shapes.txt      optional, but a new route cannot be created without one
 A bounded subset of GTFS, not the whole specification. Frequencies, transfers, fare rules, calendar
 exceptions and parent stations are not read.
 
-## Three stages, in this order
+## Four stages, in this order
 
 **Parse.** Text to typed rows. Reports anything unreadable with the file and line number the planner
 sees in their spreadsheet.
@@ -31,10 +37,57 @@ sees in their spreadsheet.
 differ in kind: a bad number is a typo in one cell, while a trip referencing a missing route means two
 files disagree.
 
+**Stage.** The feed is stored with a preview of what it would change. Nothing operational is written.
+
 **Activate.** One transaction. Either the whole schedule moves to its new state or none of it does.
 
-Nothing touches the database until validation has passed, so a rejected feed leaves no trace — there
-is a test for exactly that.
+Nothing touches the database until validation has passed, so a rejected feed leaves no trace — not
+even a staged record, because a feed nobody can activate is not worth keeping for review. There is a
+test for exactly that.
+
+## Why uploading is not activating
+
+Uploading a file used to put it straight into service. That is the wrong shape for this particular
+piece of data.
+
+The schedule is the reference every operational number is measured against. Replacing it does not
+just change future measurements — it changes what the last hour of them meant, because punctuality
+and deviation are comparisons against a timetable that is no longer the one on screen. A change like
+that deserves a decision, and a decision needs something to read first.
+
+So an upload produces a **preview**, and someone activates it afterwards.
+
+### What the preview says
+
+Counts alone do not answer the planner's question. "Twelve routes" is the same number whether the
+feed adds one to eleven that already exist or rewrites every one of them, so each kind of record is
+split into **added** and **updated**, matched on the same natural key the importer writes on —
+agencies by name, routes and stops by code, calendars by name, trips by code.
+
+It also names what the feed does *not* mention. Routes and stops the platform already has are left in
+place rather than deleted, because vehicles are assigned to routes and history is projected onto
+their geometry — so an import that looks like a whole network replacement quietly leaves the old one
+beside it. That is worth knowing before approving, not after.
+
+Alongside those are notes: trips with no stop times (nothing on them can be measured for
+punctuality), and trips with no shape (their route keeps the geometry vehicles are still projected
+onto).
+
+### What the preview does not promise
+
+It is a comparison at a moment. Between staging and activation the schedule can change, so activation
+re-parses, re-validates and records **what it actually did** in its own field. Where the preview and
+the result disagree, the result is the truth.
+
+### Why the uploaded files are kept, not the parsed feed
+
+Activation re-parses the bytes that were uploaded. Storing the parsed result instead would be faster
+and would mean activating something nobody uploaded: a transformation produced by whichever version
+of the parser happened to be running at staging time.
+
+An import can be activated or discarded once. A second attempt is refused rather than ignored —
+usually it is two people looking at the same screen, and the second needs to be told it has already
+happened rather than left believing they did it.
 
 ## What is checked
 
