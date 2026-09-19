@@ -124,8 +124,8 @@ not.
 
 ## Next
 
-1. Screenshots for the README. The docs carry Mermaid diagrams; there are no images of the running
-   control centre, and capturing them needs a browser and a person.
+1. Screenshots for the README. The docs carry Mermaid diagrams and a demo walkthrough; there are no
+   images of the running control centre, and capturing them needs a browser and a person.
 2. Retention. The policy is documented; nothing prunes.
 3. Horizontal scale: claiming outbox rows with `FOR UPDATE SKIP LOCKED`, and a broker relay so two
    backends do not each broadcast to only their own subscribers.

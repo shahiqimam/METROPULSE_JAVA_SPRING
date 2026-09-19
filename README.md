@@ -103,6 +103,14 @@ migrations, PostGIS behaviour, the Kafka consumer, charger concurrency, authenti
 import and the WebSocket as integration tests against real infrastructure. H2 is deliberately not used — it cannot prove any of the PostGIS behaviour the
 projection depends on. See [testing.md](docs/testing.md).
 
+## Seeing it work
+
+[docs/demo.md](docs/demo.md) is a twenty-minute walkthrough: start the stack, watch a service running
+to its timetable, then break it deliberately — a vehicle crawls and the backend works out on its own
+that the line has bunched, another goes silent and ages to OFFLINE, a third is pushed off its route
+and PostGIS measures how far. Then work an alert, refuse an incident transition, lose a race for a
+charger, replay the last quarter of an hour, and put a new timetable through review.
+
 ## Some things worth looking at
 
 **[The outbox](docs/outbox.md)** — the failure it prevents (commit succeeds, publish fails), and what
@@ -164,7 +172,8 @@ Written down rather than implied, because a portfolio project that overstates it
 one with a short honest list:
 
 - **Screenshots.** The docs carry Mermaid diagrams of the runtime, the event path and the two state
-  machines, but there are no images of the running control centre.
+  machines, and [docs/demo.md](docs/demo.md) walks through the system running, but there are no
+  images of the control centre.
 - **Retention.** The policy is documented; nothing prunes automatically.
 - **Horizontal scale.** One backend instance: two would contend on the outbox publisher and would
   each broadcast to only their own WebSocket subscribers.
