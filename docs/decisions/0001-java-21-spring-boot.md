@@ -16,4 +16,8 @@ Use Java 21+ and Spring Boot for the backend and simulator modules.
 
 ## Consequences
 
-The project can demonstrate JVM fundamentals, Spring dependency injection, Spring Security, JPA/Hibernate, transactions, Flyway, Kafka integration, and Testcontainers.
+The project can demonstrate JVM fundamentals, Spring dependency injection, Spring Security,
+transactions, Flyway, Kafka integration, and Testcontainers.
+
+Persistence went to JDBC rather than JPA once it was clear what the work actually was; see
+[0007](0007-jdbc-over-jpa.md).

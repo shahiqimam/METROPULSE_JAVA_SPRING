@@ -116,6 +116,7 @@ cleanup that deletes operational history is not something to add before the poli
 - Single instance of everything. Two backends would contend on the outbox publisher (needs
   `FOR UPDATE SKIP LOCKED`) and would each broadcast to only their own WebSocket subscribers (needs a
   broker relay).
-- No log aggregation, metrics scraping or alerting on the platform itself.
+- No log aggregation or metrics scraping. Logs are emitted as ECS JSON on stdout, which is the
+  format an aggregator would read, but nothing collects them. No alerting on the platform itself.
 - The Jenkinsfile has not been run on a real Jenkins instance; the stages were validated by running
   each command by hand.

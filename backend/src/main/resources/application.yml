@@ -7,13 +7,6 @@ spring:
     password: metropulse
   flyway:
     enabled: true
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    open-in-view: false
-    properties:
-      hibernate:
-        format_sql: true
   kafka:
     bootstrap-servers: localhost:9092
     producer:
@@ -44,6 +37,24 @@ metropulse:
     topic: ${METROPULSE_OUTBOX_TOPIC:metropulse.telemetry.v1}
     batch-size: ${METROPULSE_OUTBOX_BATCH_SIZE:25}
     publish-delay-ms: ${METROPULSE_OUTBOX_PUBLISH_DELAY_MS:5000}
+
+# Structured logging.
+#
+# A request id is generated (or taken from X-Request-Id) for every request and put in the MDC, which
+# was pointless while logs were plain text: the id never reached a log line, so the one thing it
+# exists for - following a single request through the outbox, the consumer and the projection - could
+# not be done. ECS is a format log aggregators already understand, and Spring Boot emits it without
+# another dependency.
+#
+# Set METROPULSE_LOG_FORMAT to an empty value for human-readable console output while working
+# locally. Only ecs, gelf, logstash or a formatter class name are accepted; anything else - including
+# a word like "none" - fails the application at startup rather than falling back.
+logging:
+  structured:
+    format:
+      console: ${METROPULSE_LOG_FORMAT:ecs}
+  level:
+    com.metropulse: ${METROPULSE_LOG_LEVEL:INFO}
 
 management:
   endpoint:

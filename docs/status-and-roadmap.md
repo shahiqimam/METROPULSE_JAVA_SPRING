@@ -62,6 +62,8 @@ What is built, what is verified, and what is not — kept honest rather than asp
   eight reproducible scenarios and no overtaking
 - Development and production-style Compose stacks, nginx edge, Jenkins pipeline, smoke-test script
 - Maven Wrapper; 17 Flyway migrations
+- JDBC rather than JPA, deliberately and with an ADR; structured ECS logs carrying the request id
+  that `RequestIdFilter` generates
 
 ## Verified
 
@@ -107,7 +109,9 @@ Everything below was run, not assumed.
 - **Horizontal scale.** Single instance: two backends would both poll the same outbox rows, which
   needs claiming with `FOR UPDATE SKIP LOCKED`, and each would broadcast to only their own
   subscribers, which needs a broker relay.
-- **TLS**, log aggregation, platform metrics, rate limiting on login.
+- **Log aggregation and platform metrics.** Logs are structured ECS JSON carrying the request id,
+  which is the half that belongs in the application; nothing collects or scrapes them.
+- **TLS** and rate limiting on login.
 - **Jenkins** has not run on a real instance; each stage's commands were validated by hand.
 
 ## Environment limitation
