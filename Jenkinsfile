@@ -4,6 +4,16 @@
 // or a broken unit test fails in seconds rather than after a container has been pulled. The
 // integration tests need real PostgreSQL/PostGIS, and the docker stage needs a daemon, so both are
 // guarded rather than assumed.
+//
+// The agent must have a POSIX shell and a Docker daemon: every step here is `sh`, and four stages
+// build or run containers. A Windows built-in node cannot run it - Jenkins' `sh` step needs a Unix
+// shell - so on a Windows controller this wants a Linux agent, or a Jenkins that is itself in a
+// Linux container with the Docker socket mounted. Carrying a second shell dialect through the file
+// would be worse than requiring the one the project already targets.
+//
+// Ports are variables rather than constants because the obvious defaults collide. 8080 is Jenkins'
+// own default port, so a pipeline that publishes the demo stack there fails to bind on exactly the
+// machine most likely to run it, and 5433 is what a developer's dev stack already holds.
 
 pipeline {
   agent any
@@ -24,9 +34,17 @@ pipeline {
     POSTGRES_DB = 'metropulse_ci'
     POSTGRES_USER = 'metropulse'
     POSTGRES_PASSWORD = 'metropulse'
-    METROPULSE_TEST_DB_URL = 'jdbc:postgresql://localhost:5433/metropulse_ci'
+
+    // Deliberately not 5433: that is the dev stack's port, and a build should not fight a developer
+    // for it on a machine that runs both.
+    CI_POSTGRES_PORT = "${env.CI_POSTGRES_PORT ?: '5434'}"
+    METROPULSE_TEST_DB_URL = "jdbc:postgresql://localhost:${env.CI_POSTGRES_PORT ?: '5434'}/metropulse_ci"
     METROPULSE_TEST_DB_USERNAME = 'metropulse'
     METROPULSE_TEST_DB_PASSWORD = 'metropulse'
+
+    // Deliberately not 8080: Jenkins listens there by default, so the demo stack would fail to bind
+    // against the very server running this build.
+    METROPULSE_HTTP_PORT = "${env.METROPULSE_HTTP_PORT ?: '8090'}"
   }
 
   stages {
@@ -72,7 +90,7 @@ pipeline {
             -e POSTGRES_DB=${POSTGRES_DB} \
             -e POSTGRES_USER=${POSTGRES_USER} \
             -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
-            -p 5433:5432 \
+            -p ${CI_POSTGRES_PORT}:5432 \
             postgis/postgis:16-3.4
 
           for i in $(seq 1 60); do
@@ -129,6 +147,16 @@ pipeline {
         // Brings up the production-style stack, where only nginx has a published port.
         sh '''
           cp -n .env.prod.example .env.prod || true
+
+          # The port the stack publishes has to match the one the smoke test asks for, and neither
+          # can be the one Jenkins is on.
+          if grep -q '^METROPULSE_HTTP_PORT=' .env.prod; then
+            sed -i "s|^METROPULSE_HTTP_PORT=.*|METROPULSE_HTTP_PORT=${METROPULSE_HTTP_PORT}|" .env.prod
+          else
+            echo "METROPULSE_HTTP_PORT=${METROPULSE_HTTP_PORT}" >> .env.prod
+          fi
+          sed -i "s|^METROPULSE_ALLOWED_ORIGINS=.*|METROPULSE_ALLOWED_ORIGINS=http://localhost:${METROPULSE_HTTP_PORT}|" .env.prod
+
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
         '''
       }
@@ -140,10 +168,11 @@ pipeline {
         // the outbox and consumer, and that a viewer is refused a write.
         sh '''
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:8080/api/v1/health >/dev/null; then break; fi
+            if curl -sf http://localhost:${METROPULSE_HTTP_PORT}/api/v1/health >/dev/null; then break; fi
             sleep 3
           done
-          infra/scripts/smoke-test.sh http://localhost:8080 "$(grep METROPULSE_INGEST_KEY .env.prod | cut -d= -f2)"
+          INGEST_KEY="$(grep METROPULSE_INGEST_KEY .env.prod | cut -d= -f2)"
+          infra/scripts/smoke-test.sh "http://localhost:${METROPULSE_HTTP_PORT}" "$INGEST_KEY"
         '''
       }
     }

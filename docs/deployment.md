@@ -69,6 +69,28 @@ Checkout -> Compile -> Unit tests -> Start PostGIS -> Integration tests
 The order is deliberate: everything cheap runs before anything slow, so a compile error or a broken
 rule fails in seconds rather than after containers have been pulled.
 
+### What the agent needs
+
+A **POSIX shell and a Docker daemon**. Every step is `sh`, and four stages build or run containers.
+Jenkins' `sh` step cannot run on a Windows node, so a Windows controller needs either a Linux agent
+or a Jenkins that is itself in a Linux container with the Docker socket mounted. Carrying a second
+shell dialect through the Jenkinsfile would be worse than requiring the one the project targets
+everywhere else.
+
+The frontend stage also needs a Chrome or Chromium binary for headless Karma.
+
+### Ports, and why they are variables
+
+Two defaults collide with the machine most likely to run this build:
+
+| Variable | Default | Why not the obvious value |
+| --- | --- | --- |
+| `METROPULSE_HTTP_PORT` | `8090` | 8080 is Jenkins' own default port, so publishing the demo stack there fails to bind against the server running the build |
+| `CI_POSTGRES_PORT` | `5434` | 5433 is the dev stack's port, and a build should not fight a developer for it on a machine that runs both |
+
+The deploy stage writes the chosen port into `.env.prod` and the smoke test reads the same variable,
+so the two cannot drift apart.
+
 Images are tagged with the commit SHA rather than `latest`, because "which build is running" should
 have exactly one answer.
 
@@ -119,4 +141,6 @@ cleanup that deletes operational history is not something to add before the poli
 - No log aggregation or metrics scraping. Logs are emitted as ECS JSON on stdout, which is the
   format an aggregator would read, but nothing collects them. No alerting on the platform itself.
 - The Jenkinsfile has not been run on a real Jenkins instance; the stages were validated by running
-  each command by hand.
+  each command by hand, and the `.env.prod` rewriting in the deploy stage was tested in isolation.
+  Reviewing it against a real installation is what found the two port collisions above, which is
+  the kind of thing running it would have found on the first build.
